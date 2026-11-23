@@ -142,7 +142,7 @@ Each phase ends with a deliverable we can demo. Dates assume 1 or 2 developers. 
 - [ ] Deploy to testnet (chain 133), verify on Sourcify and Blockscout (keep the standard JSON under ~100 KB; Keel hit HTTP 413 with OpenZeppelin imports)
 - **Deliverable:** verified testnet vault, 40+ passing tests. **Freeze the contract ABI on Thursday.**
 
-### Phase 2: Market intelligence (Tue 24 – Wed 25 Nov, parallel with Phase 1)
+### Phase 2: Market intelligence ✅ DONE 23 Nov. See `agent/README.md` (25 unit tests + live mainnet test)
 - [ ] `market-data`: multicall for slot0, liquidity, TWAP (5 min and 1 h) and QuoterV2 quotes at several sizes (impact curve), for each pool, every N seconds
 - [ ] External references: HashKey Global, Gate and MEXC mids for HSK; Binance/OKX for ETH and BTC; APRO HSK/USD (respect its heartbeat)
 - [ ] Swap-event indexer: last 24 h of flow, plus backfill of 30 days for the backtest

@@ -15,6 +15,9 @@
 
 Deploy transactions: implementation `0xdf19765959304cda2111098272326a928bbb19560e728f2c00fdd3343a537f1c` (3,863,337 gas) and factory `0xca74a1639ada30d4f1dcef21e41ede03e6d31e597ab4bb05851540378c38852a` (626,376 gas).
 
+### Owner's testnet vault
+`0xB1C5bAf8E167d10e0d15ba5d6e7Ad814c2A7F715`, created by the owner wallet through the Owner Console. It is used for agent development.
+
 ### End-to-end two-key run on testnet (`script/E2ETestnet.s.sol`)
 These are real transactions. A throwaway *test* owner `0xcD0181a00883ad99f1ddb6BDFdb095328Dd1e87A` was used so the user's wallet never had to share a key.
 

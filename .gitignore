@@ -22,3 +22,10 @@ coverage/
 Thumbs.db
 .vscode/
 .idea/
+
+# agent runtime data
+agent/data/
+*.db
+*.db-wal
+*.db-shm
+*.log
