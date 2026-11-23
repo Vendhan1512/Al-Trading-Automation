@@ -29,5 +29,17 @@ These are real transactions. A throwaway *test* owner `0xcD0181a00883ad99f1ddb6B
 
 Testnet pool prices are not real prices. This run proves the mechanics, not profitability.
 
-## HSK mainnet (chain 177)
-Pending owner approval. Expected cost at 500 gwei: about 2.25 HSK for the implementation and factory, about 0.28 HSK for `createVault`, and about 0.14 HSK per trade.
+## HSK mainnet (chain 177), deployed 23 Nov 2026 ✅
+| Contract | Address | Verification |
+|---|---|---|
+| CountersignVault (implementation) | [`0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF`](https://hsk.blockscout.com/address/0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF) | Sourcify **exact_match** · Blockscout **full match** |
+| VaultFactory | [`0x28ae19424647A051b95944DB26ffC0102085fBfE`](https://hsk.blockscout.com/address/0x28ae19424647A051b95944DB26ffC0102085fBfE) | Sourcify **exact_match** · Blockscout **full match** |
+
+| Step | Transaction | Block | Gas |
+|---|---|---|---|
+| Deploy implementation | [`0x45349cad…1a107a`](https://hsk.blockscout.com/tx/0x45349cad97d944ebcce9b1870a520998ef0d7fec131993721493ad2eee1a107a) | 30,534,351 | 3,863,337 |
+| Deploy factory | [`0x97caf3ac…ae1cf2`](https://hsk.blockscout.com/tx/0x97caf3acc7d7ca0575c58bec9fab3b08df38c4492cf347f8b325bbb7b0ae1cf2) | 30,534,353 | 626,376 |
+
+Total cost: 2.2455 HSK at 500 gwei. The addresses match testnet because the deployer nonce was 0 on both chains.
+
+Next: the owner creates a vault through `tools/owner-console` (expected ~554 k gas, ~0.28 HSK), then funds it with USDT.
