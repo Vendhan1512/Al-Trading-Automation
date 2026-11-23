@@ -45,4 +45,6 @@ Testnet pool prices are not real prices. This run proves the mechanics, not prof
 
 Total cost: 2.2455 HSK at 500 gwei. The addresses match testnet because the deployer nonce was 0 on both chains.
 
-Next: the owner creates a vault through `tools/owner-console` (expected ~554 k gas, ~0.28 HSK), then funds it with USDT.
+### Owner mainnet vault
+[`0x76fB3ae6c48964171a297C88a16513284CfB9eE0`](https://hsk.blockscout.com/address/0x76fB3ae6c48964171a297C88a16513284CfB9eE0), created by the owner wallet `0x5bb8…4208` through the Owner Console.
+Mandate: 5 USDT per trade, 20 USDT per day, 1 USDT daily-loss stop, 10 USDT max exposure per asset, 120 s cooldown, 30-min TWAP floor with 1% slippage, 30 bps minimum edge, tiers A+B+C, assets WHSK+WETH+WBTC. Expires around 7 Dec 2026.

@@ -7,7 +7,7 @@ import { startApi } from "./api/server.js";
 import { startMarketMonitor } from "./workers/market-monitor.js";
 import { runPipeline, type AgentMode } from "./workers/pipeline.js";
 import { GuardianClient } from "./modules/execution/guardian-client.js";
-import { Executor } from "./modules/execution/executor.js";
+import { TxManager, viemChainOps } from "./modules/transactions/tx-manager.js";
 
 /**
  * Agent keeper (`pnpm agent`): market monitor -> reliability -> strategy pipeline -> Guardian ->
@@ -22,12 +22,14 @@ if (mode === "live" && (!vault || !secret)) throw new Error("live mode needs VAU
 
 const client = makeClient(MAINNET);
 const store = new Store();
+const ops = mode === "live" && secret ? viemChainOps(client, MAINNET, secret) : null;
 const ctx = {
   net: MAINNET,
   client,
   store,
   guardian: new GuardianClient(),
-  executor: mode === "live" && secret ? new Executor(client, MAINNET, secret) : null,
+  tx: ops ? new TxManager(ops, store) : null,
+  ops,
   vault,
   mode,
   agentId: "countersign-agent-1",
@@ -36,7 +38,7 @@ const ctx = {
 };
 
 let busy = false;
-startApi(store);
+startApi(store, undefined, { net: MAINNET, client, vault });
 startMarketMonitor(store, MAINNET, {
   verbose: false,
   onTick: (_snap, health, id) => {
@@ -45,7 +47,7 @@ startMarketMonitor(store, MAINNET, {
     runPipeline(ctx, health)
       .then((t) => {
         console.log(
-          `#${id} [${mode}/${t.vaultMode}] market ${health.status} · candidates ${t.candidates} → passed ${t.passed} → taken ${t.taken} → approved ${t.approved} → executed ${t.executed} · strategist ${t.strategist}`,
+          `#${id} [${mode}/${t.vaultMode}] market ${health.status} · candidates ${t.candidates} → passed ${t.passed} → taken ${t.taken} → approved ${t.approved} → executed ${t.executed} (exits ${t.exits}) · strategist ${t.strategist}`,
         );
         for (const l of t.lines) console.log(`   ${l}`);
       })

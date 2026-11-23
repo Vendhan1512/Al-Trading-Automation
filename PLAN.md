@@ -168,7 +168,7 @@ Each phase ends with a deliverable we can demo. Dates assume 1 or 2 developers. 
 - [ ] **Guardian runs as a separate process** (`guardian/` package, its own container and key, small HTTP signing API). The strategist sends proposals and receives either a signed permit or a reasoned REJECT/WAIT. Add a fast path for risk-reducing exits, and a `dryRun` mode used by the copilot's what-if
 - **Deliverable:** `POST /api/execution/validate` and `/plan` returning the full decision record, plus signed permits
 
-### Phase 5: Transactions, recovery, positions (Fri 27 – Sat 28 Nov)
+### Phase 5: Transactions, recovery, positions ✅ DONE 23 Nov (83 tests). Mainnet vault 0x76fB…9eE0 created and read live
 - [ ] `transactions`: one nonce manager for the agent key; states SUBMITTED, PENDING, CONFIRMED, FAILED, REPLACED, DROPPED
 - [ ] `recovery`: reconcile first (receipt? nonce consumed? `usedTradeIds`? balances changed?), then re-quote and re-validate, retry only with a **new** quote under the **same** tradeId. Retry limits and back-off
 - [ ] Balance reconciliation every tick: on-chain vault state is the source of truth, and the DB mirrors it

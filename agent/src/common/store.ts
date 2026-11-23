@@ -4,6 +4,56 @@ import { DatabaseSync } from "node:sqlite";
 import type { MarketSnapshot } from "../modules/market-data/types.js";
 import type { MarketHealth } from "../modules/data-reliability/engine.js";
 
+export interface TxRow {
+  trade_id: string;
+  proposal_id: string;
+  asset: string;
+  side: string;
+  tier: string;
+  hash: string | null;
+  nonce: number | null;
+  status: string;
+  deadline: number;
+  submitted_at: number;
+  updated_at: number;
+  attempts: number;
+  payload: string;
+}
+
+export interface TradeRow {
+  trade_id: string;
+  at: number;
+  asset: string;
+  side: string;
+  tier: string;
+  amount_in: string;
+  amount_out: string;
+  realized_pnl: string;
+  expected_net: string;
+  gas_used: string;
+  gas_price: string;
+  tx_hash: string;
+  block: number;
+  prediction_hash: string | null;
+}
+
+export interface PredictionRow {
+  hash: string;
+  trade_id: string | null;
+  asset: string;
+  direction: string;
+  entry: number;
+  target: number;
+  invalidation: number;
+  probability: number;
+  expires_at: number;
+  created_at: number;
+  payload: string;
+  outcome: string | null;
+  resolved_at: number | null;
+  resolved_price: number | null;
+}
+
 /**
  * Append-only local store (Node's built-in SQLite — no native build step).
  * Raw snapshots and their reliability verdicts are kept separately (design principle:
@@ -53,7 +103,147 @@ export class Store {
         BEGIN SELECT RAISE(ABORT, 'decisions is append-only'); END;
       CREATE TRIGGER IF NOT EXISTS decisions_no_delete BEFORE DELETE ON decisions
         BEGIN SELECT RAISE(ABORT, 'decisions is append-only'); END;
+
+      -- Transaction lifecycle (operational state; every change is also appended to tx_events)
+      CREATE TABLE IF NOT EXISTS transactions (
+        trade_id TEXT PRIMARY KEY,           -- one row per tradeId: the vault executes each at most once
+        proposal_id TEXT NOT NULL,
+        asset TEXT NOT NULL,
+        side TEXT NOT NULL,
+        tier TEXT NOT NULL,
+        hash TEXT,
+        nonce INTEGER,
+        status TEXT NOT NULL,                -- SUBMITTED|PENDING|CONFIRMED|REVERTED|REPLACED|DROPPED|CANCELLED|FAILED
+        deadline INTEGER NOT NULL,
+        submitted_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 1,
+        payload TEXT NOT NULL                -- path, permit, signature, prediction, guardian decision hash
+      );
+      CREATE TABLE IF NOT EXISTS tx_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trade_id TEXT NOT NULL,
+        at INTEGER NOT NULL,
+        event TEXT NOT NULL,
+        detail TEXT NOT NULL
+      );
+      CREATE TRIGGER IF NOT EXISTS tx_events_append_only BEFORE UPDATE ON tx_events
+        BEGIN SELECT RAISE(ABORT, 'tx_events is append-only'); END;
+
+      -- Confirmed fills (from the vault's TradeExecuted event)
+      CREATE TABLE IF NOT EXISTS trades (
+        trade_id TEXT PRIMARY KEY,
+        at INTEGER NOT NULL,
+        asset TEXT NOT NULL,
+        side TEXT NOT NULL,
+        tier TEXT NOT NULL,
+        amount_in TEXT NOT NULL,
+        amount_out TEXT NOT NULL,
+        realized_pnl TEXT NOT NULL,          -- quote raw, from the vault event
+        expected_net TEXT NOT NULL,          -- Guardian's committed expectation, quote raw
+        gas_used TEXT NOT NULL,
+        gas_price TEXT NOT NULL,
+        tx_hash TEXT NOT NULL,
+        block INTEGER NOT NULL,
+        prediction_hash TEXT
+      );
+      CREATE TRIGGER IF NOT EXISTS trades_append_only BEFORE UPDATE ON trades
+        BEGIN SELECT RAISE(ABORT, 'trades is append-only'); END;
+
+      -- Sworn predictions and their graded outcomes
+      CREATE TABLE IF NOT EXISTS predictions (
+        hash TEXT PRIMARY KEY,
+        trade_id TEXT,
+        asset TEXT NOT NULL,
+        direction TEXT NOT NULL,
+        entry REAL NOT NULL,
+        target REAL NOT NULL,
+        invalidation REAL NOT NULL,
+        probability REAL NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        outcome TEXT,                        -- HIT | INVALIDATED | EXPIRED (null while open)
+        resolved_at INTEGER,
+        resolved_price REAL
+      );
     `);
+  }
+
+  // ------------------------------------------------------------------ transactions
+  txUpsert(t: { tradeId: string; proposalId: string; asset: string; side: string; tier: string; hash: string | null; nonce: number | null; status: string; deadline: number; payload: unknown; at?: number }) {
+    const now = t.at ?? Date.now();
+    const p = JSON.stringify(t.payload, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+    this.db
+      .prepare(
+        `INSERT INTO transactions (trade_id, proposal_id, asset, side, tier, hash, nonce, status, deadline, submitted_at, updated_at, payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(trade_id) DO UPDATE SET hash = excluded.hash, nonce = excluded.nonce, status = excluded.status,
+           deadline = excluded.deadline, updated_at = excluded.updated_at, attempts = attempts + 1, payload = excluded.payload`,
+      )
+      .run(t.tradeId, t.proposalId, t.asset, t.side, t.tier, t.hash, t.nonce, t.status, t.deadline, now, now, p);
+    this.txEvent(t.tradeId, `SUBMIT ${t.status}`, { hash: t.hash, nonce: t.nonce });
+  }
+
+  txSetStatus(tradeId: string, status: string, detail: unknown = {}) {
+    this.db.prepare("UPDATE transactions SET status = ?, updated_at = ? WHERE trade_id = ?").run(status, Date.now(), tradeId);
+    this.txEvent(tradeId, status, detail);
+  }
+
+  txEvent(tradeId: string, event: string, detail: unknown) {
+    this.db.prepare("INSERT INTO tx_events (trade_id, at, event, detail) VALUES (?, ?, ?, ?)").run(tradeId, Date.now(), event, JSON.stringify(detail ?? {}, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
+  }
+
+  txGet(tradeId: string): TxRow | null {
+    return (this.db.prepare("SELECT * FROM transactions WHERE trade_id = ?").get(tradeId) as TxRow | undefined) ?? null;
+  }
+
+  txActive(): TxRow[] {
+    return this.db.prepare("SELECT * FROM transactions WHERE status IN ('SUBMITTED','PENDING') ORDER BY nonce").all() as unknown as TxRow[];
+  }
+
+  txRecent(limit = 50): TxRow[] {
+    return this.db.prepare("SELECT * FROM transactions ORDER BY updated_at DESC LIMIT ?").all(limit) as unknown as TxRow[];
+  }
+
+  txEvents(tradeId: string): { at: number; event: string; detail: string }[] {
+    return this.db.prepare("SELECT at, event, detail FROM tx_events WHERE trade_id = ? ORDER BY id").all(tradeId) as never;
+  }
+
+  // ------------------------------------------------------------------ trades & predictions
+  recordTrade(t: { tradeId: string; at: number; asset: string; side: string; tier: string; amountIn: string; amountOut: string; realizedPnl: string; expectedNet: string; gasUsed: string; gasPrice: string; txHash: string; block: number; predictionHash: string | null }) {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO trades (trade_id, at, asset, side, tier, amount_in, amount_out, realized_pnl, expected_net, gas_used, gas_price, tx_hash, block, prediction_hash)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(t.tradeId, t.at, t.asset, t.side, t.tier, t.amountIn, t.amountOut, t.realizedPnl, t.expectedNet, t.gasUsed, t.gasPrice, t.txHash, t.block, t.predictionHash);
+  }
+
+  trades(): TradeRow[] {
+    return this.db.prepare("SELECT * FROM trades ORDER BY at").all() as unknown as TradeRow[];
+  }
+
+  recordPrediction(p: { hash: string; tradeId: string | null; asset: string; direction: string; entry: number; target: number; invalidation: number; probability: number; expiresAt: number; createdAt: number; payload: unknown }) {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO predictions (hash, trade_id, asset, direction, entry, target, invalidation, probability, expires_at, created_at, payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(p.hash, p.tradeId, p.asset, p.direction, p.entry, p.target, p.invalidation, p.probability, p.expiresAt, p.createdAt, JSON.stringify(p.payload));
+  }
+
+  openPredictions(): PredictionRow[] {
+    return this.db.prepare("SELECT * FROM predictions WHERE outcome IS NULL").all() as unknown as PredictionRow[];
+  }
+
+  resolvePrediction(hash: string, outcome: string, price: number) {
+    // write-once: a resolved prediction can never be re-graded
+    this.db.prepare("UPDATE predictions SET outcome = ?, resolved_at = ?, resolved_price = ? WHERE hash = ? AND outcome IS NULL").run(outcome, Date.now(), price, hash);
+  }
+
+  predictions(): PredictionRow[] {
+    return this.db.prepare("SELECT * FROM predictions ORDER BY created_at").all() as unknown as PredictionRow[];
   }
 
   recordDecision(d: { at: number; kind: string; asset: string | null; outcome: string; summary: string; payload: unknown; hash: string }): number {

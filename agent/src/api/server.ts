@@ -2,6 +2,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { MAINNET } from "../config.js";
 import { Store } from "../common/store.js";
 import { startMarketMonitor } from "../workers/market-monitor.js";
+import type { Address, PublicClient } from "viem";
+import type { NetworkConfig } from "../config.js";
+import { paperVaultState, readVaultState, usdt } from "../modules/vault/state.js";
+import { evaluatePositions } from "../modules/positions/positions.js";
+import { computeMetrics } from "../modules/strategy-health/health.js";
 
 /**
  * Keeper process: runs the market monitor and serves read-only market APIs.
@@ -23,7 +28,41 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? null : v)));
 }
 
-export function startApi(store: Store, port = Number(process.env.PORT ?? 8787)) {
+export function startApi(
+  store: Store,
+  port = Number(process.env.PORT ?? 8787),
+  chain?: { net: NetworkConfig; client: PublicClient; vault: Address | null },
+) {
+const portfolio = async () => {
+  if (!chain) return null;
+  const v = chain.vault ? await readVaultState(chain.client, chain.net, chain.vault) : paperVaultState(chain.net);
+  const l = store.latest();
+  const positions = l ? evaluatePositions(chain.net, v, l.health, store.predictions(), Math.floor(Date.now() / 1000)) : [];
+  const posValue = positions.reduce((a, p) => a + (Number.isFinite(p.exitValueUsdt) ? p.exitValueUsdt : 0), 0);
+  const usdtBal = usdt(v.quoteBalance, v.quoteDecimals);
+  const m = v.mandate;
+  return {
+    vault: v.address,
+    mode: v.mode,
+    paused: v.paused,
+    usdt: usdtBal,
+    totalValueUsdt: usdtBal + posValue,
+    today: { volumeUsdt: usdt(v.dayVolume, v.quoteDecimals), realizedPnlUsdt: usdt(v.dayPnl, v.quoteDecimals) },
+    mandate: {
+      maxTradeUsdt: usdt(m.maxTradeQuote),
+      dailyVolumeUsdt: usdt(m.dailyVolumeQuote),
+      dailyLossUsdt: usdt(m.dailyLossQuote),
+      maxExposureUsdt: usdt(m.maxExposureQuote),
+      cooldownSec: m.cooldown,
+      maxSlippageBps: m.maxSlippageBps,
+      minEdgeBps: m.minEdgeBps,
+      tiersMask: m.tiersMask,
+      assetsMask: m.assetsMask,
+      expiry: Number(m.expiry),
+    },
+    positions: positions.map((p) => ({ ...p, qtyRaw: p.qtyRaw.toString() })),
+  };
+};
 function latestOr503(res: ServerResponse) {
   const l = store.latest();
   if (!l) {
@@ -33,7 +72,22 @@ function latestOr503(res: ServerResponse) {
   return l;
 }
 
-const routes: Record<string, (req: IncomingMessage, res: ServerResponse, url: URL) => void> = {
+const routes: Record<string, (req: IncomingMessage, res: ServerResponse, url: URL) => void | Promise<void>> = {
+  "/api/portfolio": async (_q, res) => {
+    const p = await portfolio();
+    send(res, p ? 200 : 503, p ?? { error: "no chain context" });
+  },
+  "/api/strategies/health": (_q, res) => {
+    const hsk = store.latest()?.health.assets.find((a) => a.asset === "WHSK")?.reference ?? 0.08;
+    send(res, 200, computeMetrics(store.trades(), store.predictions(), store.txRecent(500), hsk));
+  },
+  "/api/transactions": (_q, res, url) => {
+    const id = url.searchParams.get("tradeId");
+    if (id) return send(res, 200, { tx: store.txGet(id), events: store.txEvents(id) });
+    send(res, 200, { transactions: store.txRecent(100).map(({ payload: _p, ...t }) => t) });
+  },
+  "/api/predictions": (_q, res) => send(res, 200, { predictions: store.predictions().map(({ payload: _p, ...x }) => x) }),
+  "/api/trades": (_q, res) => send(res, 200, { trades: store.trades() }),
   "/api/market/health": (_q, res) => {
     const l = latestOr503(res);
     if (!l) return;
@@ -97,11 +151,9 @@ createServer((req, res) => {
   if (req.method !== "GET") return send(res, 405, { error: "read-only API" });
   const h = routes[url.pathname];
   if (!h) return send(res, 404, { error: "not found", routes: Object.keys(routes) });
-  try {
-    h(req, res, url);
-  } catch (e) {
-    send(res, 500, { error: (e as Error).message });
-  }
+  Promise.resolve()
+    .then(() => h(req, res, url))
+    .catch((e) => send(res, 500, { error: (e as Error).message.split("\n")[0] }));
 }).listen(port, () => console.log(`[api] http://localhost:${port}/api/market/health`));
 }
 

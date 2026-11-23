@@ -71,3 +71,15 @@ pnpm --filter @countersign/agent agent             # terminal 2 — agent (AGENT
 Agent API adds `/api/agent/decisions` and `/api/agent/decision?seq=N`, the full record for one decision: candidate, filter, strategist, prediction, Guardian checks, execution.
 
 Tests: **65 unit tests + 2 live tests**. The live tests read mainnet and compare the permit digest with the deployed vault.
+
+## Phase 5: transactions, recovery, positions, strategy health (done)
+| Module | Role |
+|---|---|
+| `modules/transactions/tx-manager.ts` | **Transaction Monitoring + Smart Trade Recovery.** Serialized nonce allocation. States SUBMITTED → PENDING → CONFIRMED / REVERTED / REPLACED / DROPPED / CANCELLED. Before any re-send it **reconciles on-chain**: receipt? nonce consumed? `vault.usedTradeIds(tradeId)`? A dropped transaction is resubmitted **once**, with the *same* permit and nonce and +25% gas; that's safe because the vault runs each tradeId at most once. A transaction stuck past its permit deadline gets a 0-value cancel at the same nonce. With the RPC down nothing changes state (Scenario 9). Duplicates are blocked locally and on-chain (Scenario 4). Fills are recorded from the vault's `TradeExecuted` event |
+| `modules/positions/positions.ts` | Positions marked at the **executable** exit value (pool fee + measured sell impact). Exits: hard stop-loss (−3% on cost basis), prediction invalidation, take-profit, expiry. Exits **never go through the LLM**, and there are no exits on REJECTed market data. Also grades sworn predictions (HIT / INVALIDATED / EXPIRED). Grades are write-once |
+| `modules/strategy-health/health.ts` | Realized P&L, **gas-inclusive net P&L**, win rate, max drawdown, consecutive losses, the Guardian's expected net at entry, tx failure rate, per-tier P&L, and **Brier score kept separate from P&L**. Circuit breaker: 3 consecutive losing exits, drawdown ≥ 1 USDT or ≥ 50% tx failures → the agent **pauses its own vault**. Brier > 0.3 over ≥ 8 predictions → it **tightens** the vault to drop tier C. It can only restrict, never loosen or unpause |
+
+New store tables: `transactions`, `tx_events` (append-only), `trades` (append-only), `predictions` (outcome write-once).
+New API routes: `/api/portfolio`, `/api/strategies/health`, `/api/transactions[?tradeId=]`, `/api/trades`, `/api/predictions`.
+
+Tests: **83 unit tests + 2 live tests**. Phase 5 runs against a scriptable fake chain: confirmed, reverted, replacement-executed, replaced, dropped then resubmitted then dropped, stuck then cancelled, RPC down, duplicate blocked, sequential nonces.
