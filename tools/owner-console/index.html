@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Countersign — Owner Console</title>
+<style>
+  :root { --bg:#0d1117; --card:#161b22; --line:#30363d; --text:#e6edf3; --muted:#8b949e; --acc:#3fb950; --warn:#d29922; --err:#f85149; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { margin:0 0 4px; font-size: 24px; }
+  .sub { color: var(--muted); margin-bottom: 24px; }
+  .card { background: var(--card); border:1px solid var(--line); border-radius: 10px; padding: 20px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 17px; }
+  .step { color: var(--muted); font-weight: 500; margin-right: 6px; }
+  button { background: var(--acc); color:#04260f; border:0; border-radius: 8px; padding: 9px 16px; font-weight: 600; cursor: pointer; font-size: 14px; }
+  button.secondary { background: transparent; color: var(--text); border:1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 16px; }
+  label { display:block; font-size: 13px; color: var(--muted); }
+  input, select { width:100%; margin-top: 4px; background: var(--bg); color: var(--text); border:1px solid var(--line); border-radius: 6px; padding: 8px 10px; font: inherit; }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; word-break: break-all; }
+  .kv { display:grid; grid-template-columns: 150px 1fr; gap: 6px 12px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  #log { white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--muted); max-height: 260px; overflow:auto; }
+  .ok { color: var(--acc); } .warn { color: var(--warn); } .err { color: var(--err); }
+  a { color: #58a6ff; }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Countersign — Owner Console</h1>
+  <div class="sub">You stay the owner. Every action here is signed in <b>your own wallet</b>. No private key ever leaves it.</div>
+
+  <div class="card">
+    <h2><span class="step">1</span>Connect your wallet</h2>
+    <div class="row">
+      <select id="net" style="width:auto">
+        <option value="133">HSK Testnet (133)</option>
+        <option value="177">HSK Mainnet (177)</option>
+      </select>
+      <button id="connect">Connect wallet</button>
+    </div>
+    <div class="kv" style="margin-top:14px">
+      <div>Wallet</div><div class="mono" id="acct">—</div>
+      <div>Network</div><div id="chain">—</div>
+      <div>HSK balance</div><div id="bal">—</div>
+      <div>Factory</div><div class="mono" id="factory">—</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">2</span>Your trading mandate (the rules the AI must follow)</h2>
+    <div class="grid">
+      <label>Agent address (AI)<input id="agent" class="mono" /></label>
+      <label>Guardian address (checker)<input id="guardian" class="mono" /></label>
+      <label>Max per trade (USDT)<input id="maxTrade" type="number" step="any" value="1" /></label>
+      <label>Max daily volume (USDT)<input id="dailyVol" type="number" step="any" value="5" /></label>
+      <label>Stop new trades after daily loss of (USDT)<input id="dailyLoss" type="number" step="any" value="0.5" /></label>
+      <label>Max exposure per asset (USDT)<input id="maxExp" type="number" step="any" value="3" /></label>
+      <label>Cooldown between entries (seconds)<input id="cooldown" type="number" value="120" /></label>
+      <label>Max slippage vs TWAP (bps, 100 = 1%)<input id="slip" type="number" value="100" /></label>
+      <label>Min edge for spread trades (bps)<input id="edge" type="number" value="30" /></label>
+      <label>Risk appetite
+        <select id="tiers">
+          <option value="1">Low — arbitrage only (Tier A)</option>
+          <option value="3">Medium — + spread (A+B)</option>
+          <option value="7" selected>High — + AI directional (A+B+C)</option>
+        </select>
+      </label>
+      <label>Mandate duration (days)<input id="days" type="number" value="14" /></label>
+    </div>
+    <div class="hint" id="assetsHint"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="create" disabled>Create my vault</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">3</span>Your vault</h2>
+    <div class="row">
+      <select id="vaults" style="flex:1"><option>— connect first —</option></select>
+      <button class="secondary" id="refresh" disabled>Refresh</button>
+    </div>
+    <div class="kv" style="margin-top:14px" id="vaultInfo"></div>
+    <div class="row" style="margin-top:14px">
+      <input id="depAmt" type="number" step="any" placeholder="USDT amount" style="width:160px" />
+      <button id="deposit" disabled>Deposit USDT</button>
+      <button class="secondary" id="pause" disabled>Pause</button>
+      <button class="secondary" id="unpause" disabled>Unpause</button>
+      <button class="secondary" id="revoke" disabled>Revoke agent</button>
+      <button class="secondary" id="withdraw" disabled>Withdraw all USDT</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Activity</h2>
+    <div id="log"></div>
+  </div>
+</main>
+
+<script type="module">
+import { BrowserProvider, Contract, parseUnits, formatUnits, formatEther } from "https://cdn.jsdelivr.net/npm/ethers@6.13.4/+esm";
+
+const NETS = {
+  133: { hex: "0x85", name: "HashKey Chain Testnet", rpc: "https://testnet.hsk.xyz", explorer: "https://testnet-explorer.hskchain.net", twap: 300 },
+  177: { hex: "0xb1", name: "HashKey Chain", rpc: "https://mainnet.hsk.xyz", explorer: "https://hsk.blockscout.com", twap: 1800 },
+};
+const DEFAULT_AGENT = "0x170912F2F8beb252902e9b07F63851B2e284bEA7";
+const DEFAULT_GUARDIAN = "0xE278AC403F93b05cad73f6C3C4D0B9E5667fac5D";
+
+const FACTORY_ABI = [
+  "function createVault(address agent,address guardian,address quote,address[] assets,uint24[] assetFees,(uint128 maxTradeQuote,uint128 dailyVolumeQuote,uint128 dailyLossQuote,uint128 maxExposureQuote,uint128 minArbProfitQuote,uint32 cooldown,uint32 twapWindow,uint16 maxSlippageBps,uint16 minEdgeBps,uint8 tiersMask,uint8 assetsMask,uint64 expiry) mandate) returns (address)",
+  "function vaultsOf(address owner) view returns (address[])",
+  "event VaultCreated(address indexed owner, address indexed vault, address agent, address guardian)",
+];
+const VAULT_ABI = [
+  "function owner() view returns (address)", "function agent() view returns (address)", "function guardian() view returns (address)",
+  "function paused() view returns (bool)", "function policyHash() view returns (bytes32)", "function quote() view returns (address)",
+  "function mandate() view returns ((uint128 maxTradeQuote,uint128 dailyVolumeQuote,uint128 dailyLossQuote,uint128 maxExposureQuote,uint128 minArbProfitQuote,uint32 cooldown,uint32 twapWindow,uint16 maxSlippageBps,uint16 minEdgeBps,uint8 tiersMask,uint8 assetsMask,uint64 expiry))",
+  "function pause()", "function unpause()", "function setAgent(address)", "function withdraw(address token,uint256 amount)",
+];
+const ERC20_ABI = ["function balanceOf(address) view returns (uint256)", "function decimals() view returns (uint8)", "function symbol() view returns (string)", "function transfer(address,uint256) returns (bool)"];
+
+const $ = (id) => document.getElementById(id);
+const log = (msg, cls = "") => { const d = document.createElement("div"); d.className = cls; d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`; $("log").prepend(d); };
+
+let provider, signer, account, chainId, deploy, quoteDecimals = 6;
+$("agent").value = DEFAULT_AGENT;
+$("guardian").value = DEFAULT_GUARDIAN;
+
+async function loadDeployment(id) {
+  const r = await fetch(`/contracts/deployments/${id}.json`, { cache: "no-store" });
+  if (!r.ok) throw new Error(`No deployment found for chain ${id} yet (contracts/deployments/${id}.json).`);
+  return r.json();
+}
+
+async function switchNetwork(id) {
+  const n = NETS[id];
+  try {
+    await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: n.hex }] });
+  } catch (e) {
+    if (e.code === 4902 || e?.data?.originalError?.code === 4902) {
+      await window.ethereum.request({ method: "wallet_addEthereumChain", params: [{ chainId: n.hex, chainName: n.name, rpcUrls: [n.rpc], nativeCurrency: { name: "HSK", symbol: "HSK", decimals: 18 }, blockExplorerUrls: [n.explorer] }] });
+    } else throw e;
+  }
+}
+
+async function connect() {
+  if (!window.ethereum) { log("No browser wallet found. Install MetaMask (or another EIP-1193 wallet).", "err"); return; }
+  const want = Number($("net").value);
+  await window.ethereum.request({ method: "eth_requestAccounts" });
+  await switchNetwork(want);
+  provider = new BrowserProvider(window.ethereum);
+  signer = await provider.getSigner();
+  account = await signer.getAddress();
+  chainId = Number((await provider.getNetwork()).chainId);
+  $("acct").textContent = account;
+  $("chain").textContent = `${NETS[chainId]?.name ?? "Unknown"} (${chainId})`;
+  $("bal").textContent = `${Number(formatEther(await provider.getBalance(account))).toFixed(4)} HSK`;
+  try {
+    deploy = await loadDeployment(chainId);
+    $("factory").innerHTML = `<a target="_blank" href="${NETS[chainId].explorer}/address/${deploy.vaultFactory}">${deploy.vaultFactory}</a>`;
+    quoteDecimals = Number(await new Contract(deploy.quote, ERC20_ABI, provider).decimals());
+    $("assetsHint").textContent = `Quote: ${deploy.quote} (${quoteDecimals} decimals). Tradable assets: ${deploy.assets.join(", ")}. TWAP window: ${NETS[chainId].twap / 60} min.`;
+    $("create").disabled = false; $("refresh").disabled = false;
+    log(`Connected ${account} on chain ${chainId}.`, "ok");
+    await refreshVaults();
+  } catch (e) { log(e.message, "err"); }
+}
+
+async function createVault() {
+  const q = (v) => parseUnits(String(v), quoteDecimals);
+  const assets = deploy.assets;
+  const mandate = {
+    maxTradeQuote: q($("maxTrade").value), dailyVolumeQuote: q($("dailyVol").value), dailyLossQuote: q($("dailyLoss").value),
+    maxExposureQuote: q($("maxExp").value), minArbProfitQuote: q("0.001"),
+    cooldown: Number($("cooldown").value), twapWindow: NETS[chainId].twap,
+    maxSlippageBps: Number($("slip").value), minEdgeBps: Number($("edge").value),
+    tiersMask: Number($("tiers").value), assetsMask: (1 << assets.length) - 1,
+    expiry: BigInt(Math.floor(Date.now() / 1000) + Number($("days").value) * 86400),
+  };
+  const f = new Contract(deploy.vaultFactory, FACTORY_ABI, signer);
+  $("create").disabled = true;
+  try {
+    log("Please confirm the transaction in your wallet…");
+    const tx = await f.createVault($("agent").value.trim(), $("guardian").value.trim(), deploy.quote, assets, assets.map(() => 3000), mandate);
+    log(`Submitted: ${tx.hash}`);
+    const rc = await tx.wait();
+    const ev = rc.logs.map((l) => { try { return f.interface.parseLog(l); } catch { return null; } }).find((x) => x?.name === "VaultCreated");
+    log(`Vault created: ${ev?.args.vault} (tx ${NETS[chainId].explorer}/tx/${tx.hash})`, "ok");
+    await refreshVaults();
+  } catch (e) { log(e.shortMessage || e.message, "err"); }
+  $("create").disabled = false;
+}
+
+async function refreshVaults() {
+  const f = new Contract(deploy.vaultFactory, FACTORY_ABI, provider);
+  const list = await f.vaultsOf(account);
+  $("vaults").innerHTML = list.length ? list.map((v) => `<option>${v}</option>`).join("") : "<option>— no vault yet —</option>";
+  const has = list.length > 0;
+  ["deposit", "pause", "unpause", "revoke", "withdraw"].forEach((id) => ($(id).disabled = !has));
+  if (has) await showVault(list[list.length - 1]);
+}
+
+function vault() { return new Contract($("vaults").value, VAULT_ABI, signer); }
+
+async function showVault(addr) {
+  $("vaults").value = addr;
+  const v = new Contract(addr, VAULT_ABI, provider);
+  const usdt = new Contract(deploy.quote, ERC20_ABI, provider);
+  const [o, a, g, p, m, b] = await Promise.all([v.owner(), v.agent(), v.guardian(), v.paused(), v.mandate(), usdt.balanceOf(addr)]);
+  const fmt = (x) => formatUnits(x, quoteDecimals);
+  const ex = NETS[chainId].explorer;
+  $("vaultInfo").innerHTML = `
+    <div>Vault</div><div class="mono"><a target="_blank" href="${ex}/address/${addr}">${addr}</a></div>
+    <div>Owner</div><div class="mono">${o}</div>
+    <div>Agent</div><div class="mono">${a === "0x0000000000000000000000000000000000000000" ? "REVOKED" : a}</div>
+    <div>Guardian</div><div class="mono">${g}</div>
+    <div>Status</div><div class="${p ? "warn" : "ok"}">${p ? "PAUSED (exits only)" : "ACTIVE"}</div>
+    <div>USDT in vault</div><div>${fmt(b)}</div>
+    <div>Mandate</div><div>max ${fmt(m.maxTradeQuote)} / trade · ${fmt(m.dailyVolumeQuote)} / day · stop at −${fmt(m.dailyLossQuote)} · exposure ${fmt(m.maxExposureQuote)} · cooldown ${m.cooldown}s · slippage ${m.maxSlippageBps} bps · edge ${m.minEdgeBps} bps · tiers ${m.tiersMask} · expires ${new Date(Number(m.expiry) * 1000).toLocaleString()}</div>`;
+}
+
+async function send(label, fn) {
+  try { log(`${label}: confirm in your wallet…`); const tx = await fn(); log(`${label} submitted: ${tx.hash}`); await tx.wait(); log(`${label} confirmed.`, "ok"); await showVault($("vaults").value); }
+  catch (e) { log(`${label} failed: ${e.shortMessage || e.message}`, "err"); }
+}
+
+$("connect").onclick = connect;
+$("create").onclick = createVault;
+$("refresh").onclick = refreshVaults;
+$("vaults").onchange = (e) => showVault(e.target.value);
+$("deposit").onclick = () => send("Deposit", () => new Contract(deploy.quote, ERC20_ABI, signer).transfer($("vaults").value, parseUnits($("depAmt").value || "0", quoteDecimals)));
+$("pause").onclick = () => send("Pause", () => vault().pause());
+$("unpause").onclick = () => send("Unpause", () => vault().unpause());
+$("revoke").onclick = () => send("Revoke agent", () => vault().setAgent("0x0000000000000000000000000000000000000000"));
+$("withdraw").onclick = async () => {
+  const b = await new Contract(deploy.quote, ERC20_ABI, provider).balanceOf($("vaults").value);
+  send("Withdraw", () => vault().withdraw(deploy.quote, b));
+};
+window.ethereum?.on?.("chainChanged", () => location.reload());
+window.ethereum?.on?.("accountsChanged", () => location.reload());
+</script>
+</body>
+</html>
