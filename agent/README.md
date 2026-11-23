@@ -83,3 +83,29 @@ New store tables: `transactions`, `tx_events` (append-only), `trades` (append-on
 New API routes: `/api/portfolio`, `/api/strategies/health`, `/api/transactions[?tradeId=]`, `/api/trades`, `/api/predictions`.
 
 Tests: **83 unit tests + 2 live tests**. Phase 5 runs against a scriptable fake chain: confirmed, reverted, replacement-executed, replaced, dropped then resubmitted then dropped, stuck then cancelled, RPC down, duplicate blocked, sequential nonces.
+
+## Phase 6: dashboard and Mission Control copilot (done)
+The agent serves a **public, read-only dashboard** at `http://localhost:8787/` (`web/`, dependency-free):
+- **Overview:** vault value, positions marked at executable exit, mandate, a market table with data status (icon + label), DEX vs exchange price, premium, and a 2-hour premium sparkline with a hover tooltip.
+- **Agent feed:** every journaled decision. Click one to see the full record: candidate → filter → strategist → sworn prediction → each Guardian check ✓/✕ → economics → execution.
+- **Mission Control:** the conversational copilot (below).
+- **Evidence:** contracts, transaction lifecycle, fills, sworn predictions, with explorer links.
+- **Strategy health:** P&L after gas, drawdown, win rate, Brier score, failure rate, breaker thresholds.
+
+Deep links: `/#feed`, `/#copilot`, `/?ask=How%20are%20we%20doing%3F#copilot`.
+
+**Mission Control** (`src/copilot/`) covers the four controls the track asks for (**position size, trade frequency, risk appetite, target assets**) plus the loss limit, and also:
+- **See:** positions, P&L, "why aren't you trading?", explain decision #N, market status
+- **What-if:** "what if I buy 5 USDT of BTC now?" runs the **real Guardian in dry-run** against live quotes and never signs
+- **Change:** produces a **diff card**. Stricter changes are applied by the agent via `tighten()` after the owner signs in (a message signature, no gas, 15 minutes, verified against `vault.owner()` on-chain). Looser changes come back as an unsigned `setMandate` transaction for the **owner's wallet**. The copilot never holds owner power
+
+Risk appetite presets: **low** = spread only with ≥ 60 bps edge · **medium** = arbitrage + spread · **high** = + AI-directional.
+
+With `ANTHROPIC_API_KEY` set, the copilot runs Claude (`claude-opus-5-5`) through the SDK tool runner with typed tools (`betaZodTool`), server-side refusal fallbacks and a cached system prompt. Without a key, a deterministic intent parser answers the same questions with the same tools.
+
+POST endpoints (rate-limited, never move funds): `/api/copilot`, `/api/whatif`, `/api/mandate/propose`, `/api/mandate/apply`.
+
+![Overview](../docs/img/dashboard-overview.png)
+![Mission Control](../docs/img/mission-control.png)
+
+Tests: **96 unit tests + 2 live tests**.

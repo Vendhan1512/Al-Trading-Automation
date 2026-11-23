@@ -64,7 +64,7 @@ Each strategy has a tier, ranked by how provable its edge is:
 - **See:** "What's open?", "What's my P&L today, after gas?", "Why didn't you trade in the last hour?", "Explain trade #12."
 - **Steer:** all four controls the track brief names, each shown as a typed diff card:
   - position size, trade frequency, target assets
-  - **risk appetite, mapped to tiers:** `low` = Tier A only, `medium` = A + B, `high` = A + B + C, each with preset caps
+  - **risk appetite, mapped to tiers:** `low` = spread trades only with ≥ 60 bps edge, `medium` = A + B, `high` = A + B + C. (Changed from "low = Tier A only" because Tier A is dormant on today's HSKSwap.)
 - **What-if:** "What if I traded 20 USDT on ETH right now?" runs the **real Guardian** against live quotes and replies with the impact, fees, gas, expected net value and the verdict. No other entry offers this.
 - **Authority:** tightening applies immediately (the agent calls `tighten()`). Loosening becomes an owner transaction to sign. The copilot never holds the owner's power.
 

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Countersign — the AI trader that can't trade alone</title>
+<meta name="description" content="Autonomous AI trading agent on HSKSwap (HashKey Chain). An independent Guardian countersigns every trade; the owner's on-chain mandate bounds it." />
+<link rel="stylesheet" href="/styles.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231a1a19'/><path d='M9 17l4 4 10-10' stroke='%233987e5' stroke-width='3.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1a1a19" stroke="#383835"/><path d="M9 17l4 4 10-10" stroke="#3987e5" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div>
+      <div class="name">Countersign</div>
+      <div class="tag">The AI trader that can't trade alone</div>
+    </div>
+  </div>
+  <div class="top-right">
+    <span id="modeBadge" class="pill">—</span>
+    <span id="netBadge" class="pill">HashKey Chain 177</span>
+    <button id="ownerBtn" class="btn ghost">Owner sign-in</button>
+  </div>
+</header>
+
+<section class="roles" aria-label="Who can do what">
+  <div class="role"><div class="k">AI proposes</div><div class="v">Agent key <span class="mono" id="rAgent">—</span></div><div class="s">submits only Guardian-countersigned trades</div></div>
+  <div class="arrow" aria-hidden="true">→</div>
+  <div class="role"><div class="k">Guardian validates</div><div class="v">Guardian key <span class="mono" id="rGuardian">—</span></div><div class="s">re-prices, re-checks, signs an EIP-712 permit</div></div>
+  <div class="arrow" aria-hidden="true">→</div>
+  <div class="role"><div class="k">Contract enforces</div><div class="v">Vault <a class="mono" id="rVault" target="_blank" rel="noopener">—</a></div><div class="s">permit + mandate + TWAP floor, on-chain</div></div>
+  <div class="arrow" aria-hidden="true">→</div>
+  <div class="role"><div class="k">Owner controls</div><div class="v">Owner <span class="mono" id="rOwner">—</span></div><div class="s">mandate, pause, revoke, withdraw</div></div>
+</section>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="overview" class="active">Overview</button>
+  <button role="tab" data-tab="feed">Agent feed</button>
+  <button role="tab" data-tab="copilot">Mission Control</button>
+  <button role="tab" data-tab="evidence">Evidence</button>
+  <button role="tab" data-tab="health">Strategy health</button>
+</nav>
+
+<main>
+  <!-- OVERVIEW -->
+  <section id="tab-overview" class="tab active">
+    <div class="kpis" id="kpis"></div>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-h"><h2>Markets</h2><span class="muted" id="mktTime">—</span></div>
+        <table class="t" id="mktTable"><thead><tr><th>Asset</th><th>Data</th><th class="r">HSKSwap</th><th class="r">Exchanges</th><th class="r">Premium</th><th>Premium, last ~2h</th></tr></thead><tbody></tbody></table>
+        <div class="muted small">Premium = HSKSwap spot vs the median of exchanges that pass freshness, spread and outlier checks. Negative = the pool is cheap.</div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h2>Positions</h2><span class="muted small">marked at executable exit</span></div>
+        <div id="positions"></div>
+        <div class="card-h" style="margin-top:14px"><h2>Mandate</h2><span class="muted small" id="mandateExp"></span></div>
+        <div id="mandate" class="mandate"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Latest decisions</h2><button class="btn ghost small" data-goto="feed">Open feed →</button></div>
+      <div id="latestDecisions"></div>
+    </div>
+  </section>
+
+  <!-- FEED -->
+  <section id="tab-feed" class="tab">
+    <div class="grid-feed">
+      <div class="card">
+        <div class="card-h"><h2>Decision journal</h2><span class="muted small">every tick, every candidate — sequenced and hashed</span></div>
+        <div id="feed" class="feed"></div>
+      </div>
+      <div class="card sticky">
+        <div class="card-h"><h2 id="detailTitle">Decision</h2></div>
+        <div id="detail" class="muted">Select a decision to see the candidate, filter, strategist, sworn prediction and every Guardian check.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COPILOT -->
+  <section id="tab-copilot" class="tab">
+    <div class="grid-chat">
+      <div class="card chat">
+        <div class="card-h"><h2>Mission Control</h2><span class="muted small" id="copilotMode">—</span></div>
+        <div id="chatLog" class="chat-log" aria-live="polite"></div>
+        <div class="chips" id="chips">
+          <button class="chip">How are we doing?</button>
+          <button class="chip">What's open?</button>
+          <button class="chip">Why aren't you trading?</button>
+          <button class="chip">What if I buy 5 USDT of BTC now?</button>
+          <button class="chip">Low risk, only trade ETH and BTC, at most once every 10 minutes</button>
+          <button class="chip">Max trade 3 USDT and stop for the day after losing 0.5</button>
+        </div>
+        <form id="chatForm" class="chat-form">
+          <input id="chatInput" autocomplete="off" placeholder="Ask about positions or P&L, or tell the agent how to trade…" />
+          <button class="btn">Send</button>
+        </form>
+      </div>
+      <div class="card">
+        <h2>How changes are applied</h2>
+        <ul class="howto">
+          <li><b>Stricter</b> changes (smaller size, slower, fewer assets, lower risk) are applied by the agent on-chain via <code>tighten()</code> — after the owner signs in.</li>
+          <li><b>Looser</b> changes can only be signed by the owner's wallet (<code>setMandate</code>). The copilot never holds owner power.</li>
+          <li><b>What-if</b> questions run the real Guardian in dry-run mode against live quotes. Nothing is ever signed.</li>
+          <li>Risk appetite: <b>low</b> = spread trades with ≥60 bps edge · <b>medium</b> = arbitrage + spread · <b>high</b> = + AI directional trades.</li>
+        </ul>
+        <div id="ownerState" class="owner-state muted small">Not signed in as owner.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- EVIDENCE -->
+  <section id="tab-evidence" class="tab">
+    <div class="card">
+      <div class="card-h"><h2>Contracts on HashKey Chain mainnet</h2><span class="muted small">verified on Sourcify + Blockscout</span></div>
+      <div id="contracts"></div>
+    </div>
+    <div class="card">
+      <div class="card-h"><h2>Transactions</h2><span class="muted small">SUBMITTED → PENDING → CONFIRMED / REVERTED / REPLACED / DROPPED / CANCELLED</span></div>
+      <div id="txs"></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><div class="card-h"><h2>Fills</h2><span class="muted small">from the vault's TradeExecuted event</span></div><div id="trades"></div></div>
+      <div class="card"><div class="card-h"><h2>Sworn predictions</h2><span class="muted small">hash committed in the trade; graded later</span></div><div id="preds"></div></div>
+    </div>
+  </section>
+
+  <!-- HEALTH -->
+  <section id="tab-health" class="tab">
+    <div class="kpis" id="healthKpis"></div>
+    <div class="card">
+      <h2>Reading this honestly</h2>
+      <ul class="howto">
+        <li>Prediction calibration (Brier score) is tracked <b>separately</b> from profit: accurate predictions can still lose money after fees and gas.</li>
+        <li>Net P&L includes gas paid by the agent, which the vault's cost basis does not.</li>
+        <li>The circuit breaker can only <b>restrict</b>: 3 losing exits in a row, ≥1 USDT drawdown or ≥50% failed transactions pause the vault; a Brier score above 0.3 disables AI-directional trades.</li>
+        <li>No claim of sustained profitability is made. The claim is that every trade's edge is checked, committed and provable.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="foot muted small">
+  Countersign · HSK Chain Horizon Hackathon · Track 1 AI Agent Trading · unaudited prototype, tiny sizes · <a href="https://github.com/Vendhan1512/Al-Trading-Automation" target="_blank" rel="noopener">source</a>
+</footer>
+
+<div id="tip" class="tip" role="tooltip" hidden></div>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

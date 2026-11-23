@@ -183,7 +183,7 @@ Go live early. A dated history of real mainnet decisions is what won Nalvis and 
 - [ ] Fund with small amounts (for example 10–20 USDT plus some WHSK). Owner signs the mandate from the hardware wallet
 - [ ] Run **shadow mode for 12 h, then live**. Keep the keeper running until Demo Day
 
-### Phase 6: Dashboard and conversational copilot (Fri 27 – Mon 30 Nov)
+### Phase 6: Dashboard and conversational copilot ✅ DONE 23 Nov
 - [ ] Pages: Dashboard (vault value, P&L, agent and mandate status), Agent feed (each tick: observation → reliability → candidate → AI → filter → Guardian → risk → plan → tx), Execution, Portfolio, Evidence/Verify, Strategy Health, Emergency, Simulation
 - [ ] **Public read-only mode**: anyone can view the live mainnet agent without a wallet
 - [ ] Copilot (Claude tool use, typed actions only):

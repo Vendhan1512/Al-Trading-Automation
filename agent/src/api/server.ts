@@ -7,6 +7,12 @@ import type { NetworkConfig } from "../config.js";
 import { paperVaultState, readVaultState, usdt } from "../modules/vault/state.js";
 import { evaluatePositions } from "../modules/positions/positions.js";
 import { computeMetrics } from "../modules/strategy-health/health.js";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { extname, join, normalize, resolve } from "node:path";
+import { chat, proposeMandateChange, whatIf, type CopilotCtx } from "../copilot/copilot.js";
+import { applyMandate, sessionMessage } from "../copilot/owner.js";
+import type { GuardianClient } from "../modules/execution/guardian-client.js";
+import type { ChainOps } from "../modules/transactions/tx-manager.js";
 
 /**
  * Keeper process: runs the market monitor and serves read-only market APIs.
@@ -31,8 +37,9 @@ function send(res: ServerResponse, status: number, body: unknown) {
 export function startApi(
   store: Store,
   port = Number(process.env.PORT ?? 8787),
-  chain?: { net: NetworkConfig; client: PublicClient; vault: Address | null },
+  chain?: { net: NetworkConfig; client: PublicClient; vault: Address | null; guardian?: GuardianClient; ops?: ChainOps | null },
 ) {
+const copilotCtx: CopilotCtx | null = chain?.guardian ? { net: chain.net, client: chain.client, store, guardian: chain.guardian, vault: chain.vault } : null;
 const portfolio = async () => {
   if (!chain) return null;
   const v = chain.vault ? await readVaultState(chain.client, chain.net, chain.vault) : paperVaultState(chain.net);
@@ -146,15 +153,99 @@ const routes: Record<string, (req: IncomingMessage, res: ServerResponse, url: UR
   },
 };
 
+routes["/api/config"] = (_q, res) =>
+  send(res, 200, {
+    chainId: chain?.net.chainId ?? 177,
+    explorer: chain?.net.explorer ?? "https://hsk.blockscout.com",
+    vault: chain?.vault ?? null,
+    agent: process.env.AGENT ?? null,
+    guardian: process.env.GUARDIAN ?? null,
+    owner: process.env.OWNER ?? null,
+    contracts: { vaultImplementation: "0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF", vaultFactory: chain?.net.vaultFactory ?? null, router: chain?.net.router ?? null },
+    mode: process.env.AGENT_MODE ?? "shadow",
+    copilot: process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN ? "llm" : "rules",
+  });
+routes["/api/owner/message"] = (_q, res, url) => {
+  if (!chain?.vault) return send(res, 400, { error: "no vault configured" });
+  const issuedAt = url.searchParams.get("issuedAt") ?? new Date().toISOString();
+  send(res, 200, { issuedAt, message: sessionMessage(chain.vault, chain.net.chainId, issuedAt) });
+};
+
+// ---------------- POST routes (copilot / what-if / mandate). Rate-limited; never move funds.
+const post: Record<string, (body: any) => Promise<unknown>> = {
+  "/api/copilot": async (b) => {
+    if (!copilotCtx) throw new Error("copilot unavailable");
+    const msgs = (Array.isArray(b?.messages) ? b.messages : [])
+      .filter((m: any) => (m?.role === "user" || m?.role === "assistant") && typeof m?.content === "string")
+      .map((m: any) => ({ role: m.role, content: String(m.content).slice(0, 2_000) }));
+    return chat(copilotCtx, msgs);
+  },
+  "/api/whatif": async (b) => {
+    if (!copilotCtx) throw new Error("copilot unavailable");
+    return whatIf(copilotCtx, String(b.asset).toUpperCase() as never, b.side === "SELL" ? "SELL" : "BUY", Number(b.amountUsdt));
+  },
+  "/api/mandate/propose": async (b) => {
+    if (!copilotCtx) throw new Error("copilot unavailable");
+    return proposeMandateChange(copilotCtx, b?.changes ?? {});
+  },
+  "/api/mandate/apply": async (b) => {
+    if (!chain?.vault) throw new Error("no vault configured");
+    return applyMandate(chain.client, chain.net, chain.vault, b?.proposed ?? {}, b?.auth, chain.ops ?? null);
+  },
+};
+const hits = new Map<string, number[]>();
+const limited = (ip: string) => {
+  const now = Date.now();
+  const h = (hits.get(ip) ?? []).filter((t) => now - t < 60_000);
+  h.push(now);
+  hits.set(ip, h);
+  return h.length > 30;
+};
+
+const WEB_ROOT = resolve(process.env.WEB_ROOT ?? "../web");
+const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json" };
+const serveStatic = (res: ServerResponse, pathname: string) => {
+  const rel = pathname === "/" ? "/index.html" : pathname;
+  const file = normalize(join(WEB_ROOT, rel));
+  if (!file.startsWith(WEB_ROOT) || !existsSync(file) || !statSync(file).isFile()) return false;
+  res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream", "cache-control": "no-cache" });
+  res.end(readFileSync(file));
+  return true;
+};
+
 createServer((req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
-  if (req.method !== "GET") return send(res, 405, { error: "read-only API" });
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-headers": "content-type", "access-control-allow-methods": "GET, POST" });
+    return res.end();
+  }
+  if (req.method === "POST") {
+    const p = post[url.pathname];
+    if (!p) return send(res, 404, { error: "not found" });
+    if (limited(req.socket.remoteAddress ?? "?")) return send(res, 429, { error: "slow down" });
+    let body = "";
+    req.on("data", (c) => {
+      body += c;
+      if (body.length > 32_000) req.destroy();
+    });
+    req.on("end", () => {
+      Promise.resolve()
+        .then(() => p(body ? JSON.parse(body) : {}))
+        .then((r) => send(res, 200, JSON.parse(JSON.stringify(r, (_k, v) => (typeof v === "bigint" ? v.toString() : v)))))
+        .catch((e) => send(res, 400, { error: (e as Error).message.split("\n")[0] }));
+    });
+    return;
+  }
+  if (req.method !== "GET") return send(res, 405, { error: "method not allowed" });
   const h = routes[url.pathname];
-  if (!h) return send(res, 404, { error: "not found", routes: Object.keys(routes) });
+  if (!h) {
+    if (!url.pathname.startsWith("/api/") && serveStatic(res, url.pathname)) return;
+    return send(res, 404, { error: "not found", routes: Object.keys(routes) });
+  }
   Promise.resolve()
     .then(() => h(req, res, url))
     .catch((e) => send(res, 500, { error: (e as Error).message.split("\n")[0] }));
-}).listen(port, () => console.log(`[api] http://localhost:${port}/api/market/health`));
+}).listen(port, () => console.log(`[api] dashboard http://localhost:${port}/  ·  api http://localhost:${port}/api/market/health`));
 }
 
 // `pnpm api` - market monitor + API only (no trading pipeline)

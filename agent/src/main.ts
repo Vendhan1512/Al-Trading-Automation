@@ -38,7 +38,7 @@ const ctx = {
 };
 
 let busy = false;
-startApi(store, undefined, { net: MAINNET, client, vault });
+startApi(store, undefined, { net: MAINNET, client, vault, guardian: ctx.guardian, ops });
 startMarketMonitor(store, MAINNET, {
   verbose: false,
   onTick: (_snap, health, id) => {
