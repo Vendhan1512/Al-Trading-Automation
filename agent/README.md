@@ -35,3 +35,39 @@ LIVE=1 pnpm --filter @countersign/agent exec vitest run test/live.test.ts   # li
 ```
 API (read-only, CORS open): `/api/market/health`, `/prices`, `/liquidity`, `/volume`, `/snapshot`, `/history?asset=WBTC`.
 If the monitor stops, `/health` reports `WAIT` once the last verdict is older than 3 intervals.
+
+## Phase 3: strategy and AI (done)
+| Module | Role |
+|---|---|
+| `modules/strategies/candidates.ts` | Deterministic candidates. **Tier A**: distinct-pool cycle scanner (HSKSwap is a star around USDT today, so it reports none). **Tier B**: spread reversion. BUY when `premium ≤ −(pool fee + impact + mandate minEdge + buffer)`; SELL tracked inventory when the pool is rich. Targets assume only **half** the gap closes on the pool. **Tier C**: z-score mean reversion vs recent pool history, long-only, half size |
+| `modules/strategy-filter/filter.ts` | Deterministic, runs **before** the LLM: data quality, signal expiry, mandate expiry, tier and asset, pause, cooldown (WAIT), daily loss, conflicting signals, in-flight trades, no gross edge |
+| `modules/ai-strategist/strategist.ts` | Claude (`claude-opus-5-5`, structured output via `betaZodOutputFormat`, server-side refusal fallbacks `fallbacks: "default"`, effort `medium`, cached frozen system prompt). It may only **TAKE or SKIP, and shrink size**. Code re-enforces every bound: clamps size and probability, replaces bad target/invalidation levels, ignores unknown candidates. With no credentials, a refusal or an error, it degrades to **rules-only** (Tier B taken, Tier C skipped) |
+| `modules/predictions/prediction.ts` | Sworn prediction: canonical JSON → keccak256. The hash goes into the permit and the `TradeExecuted` event |
+
+## Phase 4: Guardian (done)
+A **separate process with its own key** (`pnpm guardian`, `127.0.0.1:8788`). `common/env.ts` gives each role only its own secret, and each process refuses to start if the other role's key is visible. A test enforces that no agent module imports the Guardian service.
+
+The Guardian takes only *intent* from the agent (asset, side, size, tier, prediction). It then does all of the following itself:
+1. Confirms the vault is from the Countersign factory and that this key is its registered Guardian.
+2. Checks the prediction hash against the prediction payload.
+3. Takes **its own** market snapshot and reliability verdict.
+4. Re-quotes on QuoterV2 for 1, 2 and 3 legs.
+5. Reads the vault's own `twapFloor`.
+6. Runs `guardian/validate.ts`, which is pure and deterministic. It mirrors the mandate (cap, daily volume, daily loss, exposure, cash, cooldown, pause, tier, asset, expiry), checks the TWAP floor, price impact and **edge-or-revert**, computes **expected net value after entry fee, impact, exit fee and gas both ways**, checks **portfolio concentration and total exposure**, counts **in-flight reservations**, and builds an **adaptive execution plan** (immediate vs split, with legs spaced by the vault cooldown).
+7. Signs an EIP-712 permit. The digest is verified against the deployed vault's `permitDigest`.
+8. **Simulates the exact `execute` call from the agent address** before returning it.
+
+`?dryRun=1` evaluates without ever signing, which the copilot uses for "what-if".
+
+### Economics finding (from a live run, 23 Nov 2026)
+WBTC's pool sat about 160 bps below the exchanges, which is a real 105–111 bps edge after the pool fee. For a **1 USDT** trade the Guardian still returned **WAIT, net −0.017 USDT**, because one vault swap costs about **$0.012 of gas** at 500 gwei (about $0.024 for a round trip). Break-even is roughly **3 USDT per trade** at today's gap. The owner console now defaults to a **5 USDT** per-trade cap for that reason.
+
+## Run the whole system
+```bash
+pnpm --filter @countersign/agent guardian          # terminal 1 — Guardian (GUARDIAN_PK only)
+pnpm --filter @countersign/agent agent             # terminal 2 — agent (AGENT_PK only), AGENT_MODE=shadow by default
+# live trading: VAULT=0x<mainnet vault> AGENT_MODE=live pnpm --filter @countersign/agent agent
+```
+Agent API adds `/api/agent/decisions` and `/api/agent/decision?seq=N`, the full record for one decision: candidate, filter, strategist, prediction, Guardian checks, execution.
+
+Tests: **65 unit tests + 2 live tests**. The live tests read mainnet and compare the permit digest with the deployed vault.

@@ -150,7 +150,7 @@ Each phase ends with a deliverable we can demo. Dates assume 1 or 2 developers. 
 - [ ] Store `market_snapshots` (append-only)
 - **Deliverable:** `GET /api/market/health` showing live reliability per pool
 
-### Phase 3: Strategy and AI (Wed 25 – Thu 26 Nov)
+### Phase 3: Strategy and AI ✅ DONE 23 Nov
 - [ ] Deterministic candidate generators (these produce the numbers; the LLM never invents prices):
   1. **Atomic cycle arbitrage**: quote every 2- and 3-hop cycle at several sizes, keep it if net > gas + buffer
   2. **CEX-DEX spread**: pool vs reliable reference, only beyond the round-trip fee band
@@ -160,7 +160,7 @@ Each phase ends with a deliverable we can demo. Dates assume 1 or 2 developers. 
 - [ ] `predictions`: canonical JSON → keccak256 → `predictionHash`; store the payload off-chain
 - **Deliverable:** proposals with rationale in the DB; shadow mode running against mainnet data
 
-### Phase 4: Execution intelligence (Thu 26 – Fri 27 Nov)
+### Phase 4: Execution intelligence / Guardian ✅ DONE 23 Nov. Separate process, verified permit digest, live shadow run
 - [ ] `execution-guardian` (pure, deterministic, unit tested): quote freshness, pair match, impact vs depth, slippage vs mandate, fees (2 legs) + gas (in USDT) + exit estimate → **Expected Net Value**, then APPROVE, REJECT or WAIT with a machine-readable reason list
 - [ ] `portfolio-risk`: per-asset concentration, total exposure, correlated exposure (ETH/BTC), drawdown, daily loss, **reservations for in-flight trades**
 - [ ] `adaptive-execution`: compare 1×N vs 2×N/2 vs 3×N/3 using quotes plus extra gas; WAIT if the spread is widening. Record the comparison table

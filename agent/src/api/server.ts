@@ -12,8 +12,6 @@ import { startMarketMonitor } from "../workers/market-monitor.js";
  *   GET /api/market/history?asset=WBTC&limit=360
  * Public and read-only: nothing here can move funds.
  */
-const store = new Store();
-const PORT = Number(process.env.PORT ?? 8787);
 const STALE_AFTER_MS = 3 * Number(process.env.MONITOR_INTERVAL_SEC ?? 30) * 1000;
 
 function send(res: ServerResponse, status: number, body: unknown) {
@@ -25,6 +23,7 @@ function send(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body, (_k, v) => (typeof v === "number" && !Number.isFinite(v) ? null : v)));
 }
 
+export function startApi(store: Store, port = Number(process.env.PORT ?? 8787)) {
 function latestOr503(res: ServerResponse) {
   const l = store.latest();
   if (!l) {
@@ -82,6 +81,15 @@ const routes: Record<string, (req: IncomingMessage, res: ServerResponse, url: UR
     const limit = Math.min(Number(url.searchParams.get("limit") ?? 360), 5000);
     send(res, 200, { asset, points: store.history(asset, limit) });
   },
+  "/api/agent/decisions": (_q, res, url) => {
+    const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 500);
+    send(res, 200, { decisions: store.recentDecisions(limit) });
+  },
+  "/api/agent/decision": (_q, res, url) => {
+    const d = store.decision(Number(url.searchParams.get("seq")));
+    if (!d) return send(res, 404, { error: "unknown seq" });
+    send(res, 200, d);
+  },
 };
 
 createServer((req, res) => {
@@ -94,6 +102,12 @@ createServer((req, res) => {
   } catch (e) {
     send(res, 500, { error: (e as Error).message });
   }
-}).listen(PORT, () => console.log(`[api] http://localhost:${PORT}/api/market/health`));
+}).listen(port, () => console.log(`[api] http://localhost:${port}/api/market/health`));
+}
 
-startMarketMonitor(store, MAINNET, { verbose: process.env.QUIET !== "1" });
+// `pnpm api` - market monitor + API only (no trading pipeline)
+if (process.argv[1]?.replace(/\\/g, "/").endsWith("api/server.ts")) {
+  const store = new Store();
+  startApi(store);
+  startMarketMonitor(store, MAINNET, { verbose: process.env.QUIET !== "1" });
+}

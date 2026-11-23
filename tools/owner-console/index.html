@@ -57,10 +57,10 @@
     <div class="grid">
       <label>Agent address (AI)<input id="agent" class="mono" /></label>
       <label>Guardian address (checker)<input id="guardian" class="mono" /></label>
-      <label>Max per trade (USDT)<input id="maxTrade" type="number" step="any" value="1" /></label>
-      <label>Max daily volume (USDT)<input id="dailyVol" type="number" step="any" value="5" /></label>
-      <label>Stop new trades after daily loss of (USDT)<input id="dailyLoss" type="number" step="any" value="0.5" /></label>
-      <label>Max exposure per asset (USDT)<input id="maxExp" type="number" step="any" value="3" /></label>
+      <label>Max per trade (USDT)<input id="maxTrade" type="number" step="any" value="5" /></label>
+      <label>Max daily volume (USDT)<input id="dailyVol" type="number" step="any" value="20" /></label>
+      <label>Stop new trades after daily loss of (USDT)<input id="dailyLoss" type="number" step="any" value="1" /></label>
+      <label>Max exposure per asset (USDT)<input id="maxExp" type="number" step="any" value="10" /></label>
       <label>Cooldown between entries (seconds)<input id="cooldown" type="number" value="120" /></label>
       <label>Max slippage vs TWAP (bps, 100 = 1%)<input id="slip" type="number" value="100" /></label>
       <label>Min edge for spread trades (bps)<input id="edge" type="number" value="30" /></label>
@@ -74,6 +74,7 @@
       <label>Mandate duration (days)<input id="days" type="number" value="14" /></label>
     </div>
     <div class="hint" id="assetsHint"></div>
+    <div class="hint">Why 5 USDT per trade: at ~500 gwei a vault swap costs ~$0.012 of gas, so a round trip costs ~$0.024. Below ~3 USDT per trade the Guardian will (correctly) refuse almost every trade as unprofitable.</div>
     <div class="row" style="margin-top:14px">
       <button id="create" disabled>Create my vault</button>
     </div>

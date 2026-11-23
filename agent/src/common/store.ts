@@ -37,7 +37,46 @@ export class Store {
         BEGIN SELECT RAISE(ABORT, 'market_snapshots is append-only'); END;
       CREATE TRIGGER IF NOT EXISTS health_append_only BEFORE UPDATE ON market_health
         BEGIN SELECT RAISE(ABORT, 'market_health is append-only'); END;
+      -- Decision journal: every APPROVE / WAIT / REJECT / SKIP gets a gap-free sequence number.
+      -- Ranges of seq are later Merkle-anchored on-chain via vault.anchorDecisions().
+      CREATE TABLE IF NOT EXISTS decisions (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT,
+        at INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        asset TEXT,
+        outcome TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        hash TEXT NOT NULL
+      );
+      CREATE TRIGGER IF NOT EXISTS decisions_append_only BEFORE UPDATE ON decisions
+        BEGIN SELECT RAISE(ABORT, 'decisions is append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS decisions_no_delete BEFORE DELETE ON decisions
+        BEGIN SELECT RAISE(ABORT, 'decisions is append-only'); END;
     `);
+  }
+
+  recordDecision(d: { at: number; kind: string; asset: string | null; outcome: string; summary: string; payload: unknown; hash: string }): number {
+    const r = this.db
+      .prepare("INSERT INTO decisions (at, kind, asset, outcome, summary, payload, hash) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(d.at, d.kind, d.asset, d.outcome, d.summary, JSON.stringify(d.payload, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), d.hash);
+    return Number(r.lastInsertRowid);
+  }
+
+  recentDecisions(limit = 50): { seq: number; at: number; kind: string; asset: string | null; outcome: string; summary: string; hash: string }[] {
+    return this.db
+      .prepare("SELECT seq, at, kind, asset, outcome, summary, hash FROM decisions ORDER BY seq DESC LIMIT ?")
+      .all(limit) as never;
+  }
+
+  decision(seq: number): { seq: number; payload: unknown; hash: string } | null {
+    const r = this.db.prepare("SELECT seq, payload, hash FROM decisions WHERE seq = ?").get(seq) as { seq: number; payload: string; hash: string } | undefined;
+    return r ? { seq: r.seq, payload: JSON.parse(r.payload), hash: r.hash } : null;
+  }
+
+  /** DEX spot series for one asset, oldest first (Tier C z-score input). */
+  dexSeries(asset: string, limit = 120): number[] {
+    return this.history(asset, limit).map((p) => p.dex);
   }
 
   record(snap: MarketSnapshot, health: MarketHealth): number {
