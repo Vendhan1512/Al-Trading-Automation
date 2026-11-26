@@ -61,7 +61,9 @@ abstract contract BaseTest is Test {
         fees[1] = FEE;
 
         vm.prank(owner);
-        vault = CountersignVault(factory.createVault(agent, guardian, address(usdt), assets, fees, defaultMandate()));
+        vault = CountersignVault(
+            factory.createVault(agent, committee1(), 1, address(usdt), assets, fees, defaultMandate())
+        );
         usdt.mint(address(vault), 500e6);
     }
 
@@ -85,8 +87,32 @@ abstract contract BaseTest is Test {
             minEdgeBps: 50,
             tiersMask: 7,
             assetsMask: 3,
-            expiry: uint64(block.timestamp + 7 days)
+            expiry: uint64(block.timestamp + 7 days),
+            minNetValueQuote: 0,
+            stopLossBps: 0,
+            takeProfitBps: 0,
+            maxDrawdownBps: 0
         });
+    }
+
+    function committee1() internal view returns (address[] memory g) {
+        g = new address[](1);
+        g[0] = guardian;
+    }
+
+    function committeeOf(address a) internal pure returns (address[] memory g) {
+        g = new address[](1);
+        g[0] = a;
+    }
+
+    function one(bytes memory s) internal pure returns (bytes[] memory a) {
+        a = new bytes[](1);
+        a[0] = s;
+    }
+
+    function rawSig(CountersignVault.ExecutionPermit memory p, uint256 pk) internal view returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, vault.permitDigest(p));
+        return abi.encodePacked(r, s, v);
     }
 
     // ------------------------------------------------------------- helpers
@@ -114,15 +140,14 @@ abstract contract BaseTest is Test {
         });
     }
 
-    function sign(CountersignVault.ExecutionPermit memory p, uint256 pk) internal view returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, vault.permitDigest(p));
-        return abi.encodePacked(r, s, v);
+    function sign(CountersignVault.ExecutionPermit memory p, uint256 pk) internal view returns (bytes[] memory) {
+        return one(rawSig(p, pk));
     }
 
     /// @dev A valid Guardian-approved tier-B BUY of `amountIn` USDT -> asset.
     function buyPermit(address asset, uint256 amountIn)
         internal
-        returns (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig)
+        returns (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig)
     {
         path = path1(address(usdt), asset);
         uint256 q = router.quoteHop(address(usdt), asset, FEE, amountIn);
@@ -133,14 +158,14 @@ abstract contract BaseTest is Test {
     }
 
     function doBuy(address asset, uint256 amountIn) internal returns (uint256 out) {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) = buyPermit(asset, amountIn);
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) = buyPermit(asset, amountIn);
         vm.prank(agent);
         out = vault.execute(path, p, sig);
     }
 
     function sellPermit(address asset, uint256 amountIn, uint8 tier)
         internal
-        returns (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig)
+        returns (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig)
     {
         path = path1(asset, address(usdt));
         uint256 q = router.quoteHop(asset, address(usdt), FEE, amountIn);
@@ -149,7 +174,7 @@ abstract contract BaseTest is Test {
     }
 
     function doSell(address asset, uint256 amountIn, uint8 tier) internal returns (uint256 out) {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             sellPermit(asset, amountIn, tier);
         vm.prank(agent);
         out = vault.execute(path, p, sig);

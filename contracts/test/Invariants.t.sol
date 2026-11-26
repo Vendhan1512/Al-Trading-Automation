@@ -55,7 +55,7 @@ contract Handler is Test {
             amountIn: amountIn,
             minOut: minOut,
             refAmountOut: ref,
-            expectedNetValue: 0,
+            expectedNetValue: 1, // v2: entries must carry a positive committee-signed expectation
             predictionHash: keccak256("p"),
             decisionHash: bytes32(0),
             policyHash: vault.policyHash(),
@@ -63,9 +63,10 @@ contract Handler is Test {
         });
     }
 
-    function _sign(CountersignVault.ExecutionPermit memory p, uint256 pk) internal view returns (bytes memory) {
+    function _sign(CountersignVault.ExecutionPermit memory p, uint256 pk) internal view returns (bytes[] memory a) {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, vault.permitDigest(p));
-        return abi.encodePacked(r, s, v);
+        a = new bytes[](1);
+        a[0] = abi.encodePacked(r, s, v);
     }
 
     function legitBuy(uint256 assetSeed, uint256 amountIn, uint8 tierSeed) external {
@@ -75,7 +76,7 @@ contract Handler is Test {
         bytes memory path = abi.encodePacked(usdt, uint24(3000), asset);
         uint256 q = router.quoteHop(usdt, asset, 3000, amountIn);
         CountersignVault.ExecutionPermit memory p = _permit(path, tier, amountIn, q * 999 / 1000, q * 99 / 100);
-        bytes memory sig = _sign(p, guardianPk);
+        bytes[] memory sig = _sign(p, guardianPk);
         vm.prank(agent);
         try vault.execute(path, p, sig) {
             legitTrades++;
@@ -91,7 +92,7 @@ contract Handler is Test {
         bytes memory path = abi.encodePacked(asset, uint24(3000), usdt);
         uint256 q = router.quoteHop(asset, usdt, 3000, amountIn);
         CountersignVault.ExecutionPermit memory p = _permit(path, 0, amountIn, q * 999 / 1000, 0);
-        bytes memory sig = _sign(p, guardianPk);
+        bytes[] memory sig = _sign(p, guardianPk);
         vm.prank(agent);
         try vault.execute(path, p, sig) {
             legitTrades++;
@@ -104,7 +105,7 @@ contract Handler is Test {
         bytes memory path =
             buy ? abi.encodePacked(usdt, uint24(3000), asset) : abi.encodePacked(asset, uint24(3000), usdt);
         CountersignVault.ExecutionPermit memory p = _permit(path, 2, amountIn, minOut, 0);
-        bytes memory sig = _sign(p, agentPk);
+        bytes[] memory sig = _sign(p, agentPk);
         vm.prank(agent);
         try vault.execute(path, p, sig) {} catch {}
     }
@@ -115,7 +116,9 @@ contract Handler is Test {
         vm.startPrank(caller);
         try vault.withdraw(usdt, bound(amount, 0, 1e12)) {} catch {}
         try vault.setAgent(to) {} catch {}
-        try vault.setGuardian(to) {} catch {}
+        address[] memory g = new address[](1);
+        g[0] = to;
+        try vault.setCommittee(g, 1) {} catch {}
         try vault.transferOwnership(to) {} catch {}
         try vault.acceptOwnership() {} catch {}
         try vault.unpause() {} catch {}

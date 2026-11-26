@@ -81,7 +81,7 @@ contract Deploy is Script {
 }
 
 /// @notice Step 2 — the OWNER creates their vault. On mainnet, run it with the hardware wallet:
-///   AGENT=0x.. GUARDIAN=0x.. forge script script/Deploy.s.sol:CreateVault \
+///   AGENT=0x.. GUARDIANS=0xG1,0xG2 THRESHOLD=2 forge script script/Deploy.s.sol:CreateVault \
 ///     --rpc-url hsk_mainnet --broadcast --ledger --sender <ledger address>
 ///   Optional env: MAX_TRADE, DAILY_VOLUME, DAILY_LOSS, MAX_EXPOSURE (quote units),
 ///   COOLDOWN, SLIPPAGE_BPS, MIN_EDGE_BPS, TIERS, ASSETS_MASK, DAYS.
@@ -104,12 +104,18 @@ contract CreateVault is Script {
             minEdgeBps: uint16(vm.envOr("MIN_EDGE_BPS", uint256(30))),
             tiersMask: uint8(vm.envOr("TIERS", uint256(7))),
             assetsMask: uint8(vm.envOr("ASSETS_MASK", (uint256(1) << c.assets.length) - 1)),
-            expiry: uint64(block.timestamp + vm.envOr("DAYS", uint256(14)) * 1 days)
+            expiry: uint64(block.timestamp + vm.envOr("DAYS", uint256(14)) * 1 days),
+            minNetValueQuote: uint128(vm.envOr("MIN_NET", uint256(0))),
+            stopLossBps: uint16(vm.envOr("STOP_LOSS_BPS", uint256(300))),
+            takeProfitBps: uint16(vm.envOr("TAKE_PROFIT_BPS", uint256(0))),
+            maxDrawdownBps: uint16(vm.envOr("MAX_DD_BPS", uint256(1000)))
         });
+        // committee: GUARDIANS=0xA,0xB and THRESHOLD=k (default: all must sign)
+        address[] memory committee = vm.envAddress("GUARDIANS", ",");
+        uint8 k = uint8(vm.envOr("THRESHOLD", committee.length));
 
         vm.startBroadcast();
-        vault = VaultFactory(factory)
-            .createVault(vm.envAddress("AGENT"), vm.envAddress("GUARDIAN"), c.quote, c.assets, c.fees, m);
+        vault = VaultFactory(factory).createVault(vm.envAddress("AGENT"), committee, k, c.quote, c.assets, c.fees, m);
         vm.stopBroadcast();
         console2.log("Vault:", vault);
         console2.log("Owner:", CountersignVault(vault).owner());

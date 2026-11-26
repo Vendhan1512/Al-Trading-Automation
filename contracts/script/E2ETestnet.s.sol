@@ -57,14 +57,19 @@ contract E2ETestnet is Script {
             minEdgeBps: 30,
             tiersMask: 7,
             assetsMask: 1,
-            expiry: uint64(block.timestamp + 14 days)
+            expiry: uint64(block.timestamp + 14 days),
+            minNetValueQuote: 0,
+            stopLossBps: 300,
+            takeProfitBps: 0,
+            maxDrawdownBps: 0
         });
+        address[] memory committee = new address[](1);
+        committee[0] = vm.addr(guardianPk);
 
         // 1) test owner creates the vault and deposits 0.01 WHSK with a TWAP cost basis
         vm.startBroadcast(ownerPk);
-        CountersignVault vault = CountersignVault(
-            VaultFactory(factory).createVault(vm.addr(agentPk), vm.addr(guardianPk), USDT, assets, fees, m)
-        );
+        CountersignVault vault =
+            CountersignVault(VaultFactory(factory).createVault(vm.addr(agentPk), committee, 1, USDT, assets, fees, m));
         IWETH(WHSK).deposit{value: 0.01 ether}();
         IWETH(WHSK).approve(address(vault), 0.01 ether);
         vault.depositAsset(WHSK, 0.01 ether);
@@ -73,8 +78,8 @@ contract E2ETestnet is Script {
 
         // 2) Guardian prices and countersigns an exit (SELL 0.005 WHSK)
         bytes memory path = abi.encodePacked(WHSK, uint24(3000), USDT);
-        (uint256 q,,,) =
-            IQuoterV2(QUOTER).quoteExactInputSingle(IQuoterV2.QuoteExactInputSingleParams(WHSK, USDT, 0.005 ether, 3000, 0));
+        (uint256 q,,,) = IQuoterV2(QUOTER)
+            .quoteExactInputSingle(IQuoterV2.QuoteExactInputSingleParams(WHSK, USDT, 0.005 ether, 3000, 0));
         CountersignVault.ExecutionPermit memory p = CountersignVault.ExecutionPermit({
             tradeId: keccak256(abi.encode("e2e-testnet", address(vault), block.timestamp)),
             tier: 0,
@@ -94,7 +99,11 @@ contract E2ETestnet is Script {
 
         // 3) attack check (simulated): the agent with a self-signed permit is refused
         vm.prank(vm.addr(agentPk));
-        try vault.execute(path, p, abi.encodePacked(r2, s2, v2)) {
+        bytes[] memory selfSigned = new bytes[](1);
+        selfSigned[0] = abi.encodePacked(r2, s2, v2);
+        bytes[] memory countersigned = new bytes[](1);
+        countersigned[0] = abi.encodePacked(r, s, v);
+        try vault.execute(path, p, selfSigned) {
             revert("SECURITY FAILURE: self-signed permit accepted");
         } catch (bytes memory err) {
             require(bytes4(err) == CountersignVault.InvalidPermit.selector, "unexpected error");
@@ -103,7 +112,7 @@ contract E2ETestnet is Script {
 
         // 4) the agent submits the Guardian-countersigned permit (real tx)
         vm.startBroadcast(agentPk);
-        uint256 out = vault.execute(path, p, abi.encodePacked(r, s, v));
+        uint256 out = vault.execute(path, p, countersigned);
         vm.stopBroadcast();
         console2.log("Countersigned SELL executed, USDT out:", out);
         console2.logBytes32(p.tradeId);

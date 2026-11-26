@@ -41,13 +41,15 @@ contract CountersignVaultTest is BaseTest {
         fees[0] = FEE;
         vm.prank(owner);
         vm.expectRevert(CountersignVault.InvalidParams.selector);
-        factory.createVault(agent, agent, address(usdt), assets, fees, defaultMandate());
+        address[] memory g = new address[](1);
+        g[0] = agent; // the agent cannot also be a guardian
+        factory.createVault(agent, g, 1, address(usdt), assets, fees, defaultMandate());
     }
 
     // =============================================================== BUY path
 
     function test_Buy_TierB_HappyPath() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 50e6);
         vm.expectEmit(true, true, false, false, address(vault));
         emit CountersignVault.TradeExecuted(
@@ -73,7 +75,7 @@ contract CountersignVaultTest is BaseTest {
         bytes memory path = path1(address(usdt), address(whsk));
         uint256 q = router.quoteHop(address(usdt), address(whsk), FEE, 10e6);
         CountersignVault.ExecutionPermit memory p = permit(path, 3, 10e6, q * 999 / 1000, 0, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.MissingPrediction.selector);
         vault.execute(path, p, sig);
@@ -88,7 +90,7 @@ contract CountersignVaultTest is BaseTest {
 
     function test_Attack_StolenAgentKey_SelfSignedPermit() public {
         (bytes memory path, CountersignVault.ExecutionPermit memory p,) = buyPermit(address(whsk), 50e6);
-        bytes memory forged = sign(p, agentPk); // the agent signs its own permit
+        bytes[] memory forged = sign(p, agentPk); // the agent signs its own permit
         vm.prank(agent);
         vm.expectRevert(CountersignVault.InvalidPermit.selector);
         vault.execute(path, p, forged);
@@ -96,14 +98,14 @@ contract CountersignVaultTest is BaseTest {
 
     function test_Attack_AttackerSignedPermit() public {
         (bytes memory path, CountersignVault.ExecutionPermit memory p,) = buyPermit(address(whsk), 50e6);
-        bytes memory forged = sign(p, attackerPk);
+        bytes[] memory forged = sign(p, attackerPk);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.InvalidPermit.selector);
         vault.execute(path, p, forged);
     }
 
     function test_Attack_GuardianCannotSubmit() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 50e6);
         vm.prank(guardian);
         vm.expectRevert(CountersignVault.NotAgent.selector);
@@ -111,7 +113,7 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Attack_OwnerCannotSubmitAsAgent() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 50e6);
         vm.prank(owner);
         vm.expectRevert(CountersignVault.NotAgent.selector);
@@ -119,7 +121,7 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Attack_TamperedAmount() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         p.amountIn = 50e6; // AI tries to upsize after approval
         vm.prank(agent);
@@ -128,7 +130,7 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Attack_TamperedMinOut() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         p.minOut = 1;
         vm.prank(agent);
@@ -137,7 +139,7 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Attack_TamperedPath() public {
-        (, CountersignVault.ExecutionPermit memory p, bytes memory sig) = buyPermit(address(whsk), 10e6);
+        (, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) = buyPermit(address(whsk), 10e6);
         bytes memory other = path1(address(usdt), address(weth));
         vm.prank(agent);
         vm.expectRevert(CountersignVault.PathMismatch.selector);
@@ -145,7 +147,7 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Attack_ReplayTradeId() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         vm.prank(agent);
         vault.execute(path, p, sig);
@@ -157,15 +159,16 @@ contract CountersignVaultTest is BaseTest {
 
     function test_Attack_PermitForOtherVaultRejected() public {
         // Same owner, second vault: a permit signed for vault #1 must not work on vault #2.
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         address[] memory assets = vault.assets();
         uint24[] memory fees = new uint24[](2);
         fees[0] = FEE;
         fees[1] = FEE;
         vm.prank(owner);
-        CountersignVault v2 =
-            CountersignVault(factory.createVault(agent, guardian, address(usdt), assets, fees, defaultMandate()));
+        CountersignVault v2 = CountersignVault(
+            factory.createVault(agent, committee1(), 1, address(usdt), assets, fees, defaultMandate())
+        );
         usdt.mint(address(v2), 100e6);
         p.policyHash = v2.policyHash(); // even with a matching policy hash, the domain differs
         vm.prank(agent);
@@ -174,21 +177,22 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Attack_MalleableSignatureRejected() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
+        bytes memory raw = sig[0];
         bytes32 r;
         bytes32 s;
         uint8 v;
         assembly {
-            r := mload(add(sig, 32))
-            s := mload(add(sig, 64))
-            v := byte(0, mload(add(sig, 96)))
+            r := mload(add(raw, 32))
+            s := mload(add(raw, 64))
+            v := byte(0, mload(add(raw, 96)))
         }
         uint256 n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
         bytes memory flipped = abi.encodePacked(r, bytes32(n - uint256(s)), v == 27 ? uint8(28) : uint8(27));
         vm.prank(agent);
         vm.expectRevert(ECDSALite.InvalidSignature.selector);
-        vault.execute(path, p, flipped);
+        vault.execute(path, p, one(flipped));
     }
 
     function test_Attack_ReentrancyViaRouter() public {
@@ -200,7 +204,7 @@ contract CountersignVaultTest is BaseTest {
         bytes memory path = path1(address(usdt), address(whsk));
         uint256 q = router.quoteHop(address(usdt), address(whsk), FEE, 10e6);
         CountersignVault.ExecutionPermit memory p = _permitFor(v, path, 2, 10e6, q * 999 / 1000, q * 99 / 100);
-        bytes memory sig = _signFor(v, p);
+        bytes[] memory sig = _signFor(v, p);
         // the router re-enters execute() during the swap
         evil.arm(address(v), abi.encodeCall(CountersignVault.execute, (path, p, sig)));
         vm.prank(agent);
@@ -211,7 +215,7 @@ contract CountersignVaultTest is BaseTest {
     // ======================================================== mandate checks
 
     function test_Revert_PermitExpired() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         vm.warp(p.deadline + 1);
         vm.prank(agent);
@@ -220,7 +224,7 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Revert_MandateExpired() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         p.deadline = uint64(block.timestamp + 8 days);
         sig = sign(p, guardianPk);
@@ -231,7 +235,7 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_Revert_PolicyChangeInvalidatesPermits() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         CountersignVault.Mandate memory m = vault.mandate();
         m.maxTradeQuote = 40e6;
@@ -244,7 +248,7 @@ contract CountersignVaultTest is BaseTest {
 
     function test_Revert_TradeTooLarge() public {
         // Scenario 5: the AI asks for 100 USDT when the cap is 50 — even with a Guardian signature.
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 100e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.TradeTooLarge.selector, 100e6, 50e6));
@@ -258,7 +262,8 @@ contract CountersignVaultTest is BaseTest {
         vm.warp(block.timestamp + 61);
         doBuy(address(whsk), 50e6);
         vm.warp(block.timestamp + 61);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) = buyPermit(address(weth), 1e6);
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
+            buyPermit(address(weth), 1e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.DailyVolumeExceeded.selector, 151e6, 150e6));
         vault.execute(path, p, sig);
@@ -269,7 +274,8 @@ contract CountersignVaultTest is BaseTest {
         vm.warp(block.timestamp + 61);
         doBuy(address(whsk), 50e6);
         vm.warp(block.timestamp + 61);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) = buyPermit(address(whsk), 1e6);
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
+            buyPermit(address(whsk), 1e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.ExposureExceeded.selector, 101e6, 100e6));
         vault.execute(path, p, sig);
@@ -277,7 +283,7 @@ contract CountersignVaultTest is BaseTest {
 
     function test_Revert_Cooldown() public {
         doBuy(address(whsk), 10e6);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(weth), 10e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.Cooldown.selector, block.timestamp + 60));
@@ -292,7 +298,7 @@ contract CountersignVaultTest is BaseTest {
         bytes memory path = path1(address(usdt), address(whsk));
         uint256 q = router.quoteHop(address(usdt), address(whsk), FEE, 10e6);
         CountersignVault.ExecutionPermit memory p = permit(path, 3, 10e6, q / 2, 0, keccak256("p"));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         uint256 floor = vault.twapFloor(address(usdt), address(whsk), FEE, 10e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.BelowTwapFloor.selector, q / 2, floor));
@@ -301,7 +307,7 @@ contract CountersignVaultTest is BaseTest {
 
     function test_Revert_RouterMinOutWhenMarketMoves() public {
         // Scenario 3: quote validated, then the market moves against us before inclusion.
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         router.setDeviation(address(whskUsdt), -300); // execution 3% worse than TWAP
         vm.prank(agent);
@@ -314,7 +320,7 @@ contract CountersignVaultTest is BaseTest {
         uint256 q = router.quoteHop(address(usdt), address(whsk), FEE, 10e6);
         // reference equals the pool: no edge at all
         CountersignVault.ExecutionPermit memory p = permit(path, 2, 10e6, q * 999 / 1000, q, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         uint256 required = (q * 10_050 + 9_999) / 10_000;
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.InsufficientEdge.selector, q * 999 / 1000, required));
@@ -326,7 +332,7 @@ contract CountersignVaultTest is BaseTest {
         m.tiersMask = 1; // risk appetite "low": arbitrage only
         vm.prank(owner);
         vault.setMandate(m);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.TierNotAllowed.selector, 2));
@@ -337,7 +343,7 @@ contract CountersignVaultTest is BaseTest {
         bytes memory path = path1(address(usdt), address(whsk));
         uint256 q = router.quoteHop(address(usdt), address(whsk), FEE, 10e6);
         CountersignVault.ExecutionPermit memory p = permit(path, 0, 10e6, q * 999 / 1000, 0, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.TierNotAllowed.selector, 0));
         vault.execute(path, p, sig);
@@ -348,7 +354,7 @@ contract CountersignVaultTest is BaseTest {
         m.assetsMask = 1; // "only trade WHSK"
         vm.prank(owner);
         vault.setMandate(m);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(weth), 10e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.AssetNotAllowed.selector, address(weth)));
@@ -358,7 +364,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Revert_UnknownToken() public {
         bytes memory path = abi.encodePacked(address(usdt), FEE, address(0xdead));
         CountersignVault.ExecutionPermit memory p = permit(path, 2, 10e6, 1, 1, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.UnknownToken.selector, address(0xdead)));
         vault.execute(path, p, sig);
@@ -367,7 +373,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Revert_UnsupportedRoute_AssetToAsset() public {
         bytes memory path = path1(address(whsk), address(weth));
         CountersignVault.ExecutionPermit memory p = permit(path, 2, 1e18, 1, 1, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.UnsupportedRoute.selector);
         vault.execute(path, p, sig);
@@ -376,7 +382,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Revert_MultiHopBuyNotAllowed() public {
         bytes memory path = abi.encodePacked(address(usdt), FEE, address(weth), FEE, address(whsk));
         CountersignVault.ExecutionPermit memory p = permit(path, 2, 1e6, 1, 1, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.UnsupportedRoute.selector);
         vault.execute(path, p, sig);
@@ -385,7 +391,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Revert_BadPath() public {
         bytes memory path = abi.encodePacked(address(usdt), FEE);
         CountersignVault.ExecutionPermit memory p = permit(path, 2, 1e6, 1, 1, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.BadPath.selector);
         vault.execute(path, p, sig);
@@ -417,7 +423,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Revert_SellMoreThanTracked() public {
         uint256 bought = doBuy(address(whsk), 10e6);
         whsk.mint(address(vault), 1e18); // untracked donation
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             sellPermit(address(whsk), bought + 1, 0);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.NotEnoughTracked.selector, bought + 1, bought));
@@ -430,7 +436,7 @@ contract CountersignVaultTest is BaseTest {
         vault.pause();
         vm.warp(block.timestamp + 61);
 
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(weth), 10e6);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.VaultPaused.selector);
@@ -452,7 +458,8 @@ contract CountersignVaultTest is BaseTest {
         assertLt(pnl, -10e6);
 
         vm.warp(block.timestamp + 61);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) = buyPermit(address(weth), 1e6);
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
+            buyPermit(address(weth), 1e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.DailyLossReached.selector, pnl, 10e6));
         vault.execute(path, p, sig);
@@ -460,7 +467,7 @@ contract CountersignVaultTest is BaseTest {
         doSell(address(weth), b2, 0); // exits still work
 
         vm.warp((block.timestamp / 1 days + 1) * 1 days + 1); // next UTC day
-        (bytes memory path2, CountersignVault.ExecutionPermit memory p2, bytes memory sig2) =
+        (bytes memory path2, CountersignVault.ExecutionPermit memory p2, bytes[] memory sig2) =
             buyPermit(address(weth), 1e6);
         vm.prank(agent);
         vault.execute(path2, p2, sig2);
@@ -479,7 +486,8 @@ contract CountersignVaultTest is BaseTest {
         (, int128 pnl) = vault.currentDay();
         assertLt(pnl, 0);
         vm.warp(block.timestamp + 61);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) = buyPermit(address(whsk), 1e6);
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
+            buyPermit(address(whsk), 1e6);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.DailyLossReached.selector, pnl, 0));
         vault.execute(path, p, sig);
@@ -493,7 +501,7 @@ contract CountersignVaultTest is BaseTest {
         uint256 out = _quotePath3(10e6);
         assertGt(out, 10e6);
         CountersignVault.ExecutionPermit memory p = permit(path, 1, 10e6, out, 0, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         uint256 before = usdt.balanceOf(address(vault));
         vm.prank(agent);
         vault.execute(path, p, sig);
@@ -507,7 +515,7 @@ contract CountersignVaultTest is BaseTest {
         bytes memory path = abi.encodePacked(address(usdt), FEE, address(whsk), FEE, address(weth), FEE, address(usdt));
         uint256 out = _quotePath3(10e6);
         CountersignVault.ExecutionPermit memory p = permit(path, 1, 10e6, out, 0, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         router.setDeviation(address(whskWeth), 0); // someone else closes the gap first
         uint256 before = usdt.balanceOf(address(vault));
         vm.prank(agent);
@@ -519,7 +527,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Arb_MinOutMustLockProfit() public {
         bytes memory path = abi.encodePacked(address(usdt), FEE, address(whsk), FEE, address(weth), FEE, address(usdt));
         CountersignVault.ExecutionPermit memory p = permit(path, 1, 10e6, 10e6, 0, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.ArbProfitTooLow.selector, 10e6, 10.01e6));
         vault.execute(path, p, sig);
@@ -528,7 +536,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Arb_WrongTier() public {
         bytes memory path = abi.encodePacked(address(usdt), FEE, address(whsk), FEE, address(weth), FEE, address(usdt));
         CountersignVault.ExecutionPermit memory p = permit(path, 2, 10e6, 11e6, 0, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.TierNotAllowed.selector, 2));
         vault.execute(path, p, sig);
@@ -537,7 +545,7 @@ contract CountersignVaultTest is BaseTest {
     function test_Arb_QuoteAsIntermediateRejected() public {
         bytes memory path = abi.encodePacked(address(usdt), FEE, address(whsk), FEE, address(usdt), FEE, address(usdt));
         CountersignVault.ExecutionPermit memory p = permit(path, 1, 10e6, 11e6, 0, bytes32(0));
-        bytes memory sig = sign(p, guardianPk);
+        bytes[] memory sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.AssetNotAllowed.selector, address(usdt)));
         vault.execute(path, p, sig);
@@ -547,7 +555,7 @@ contract CountersignVaultTest is BaseTest {
 
     function test_RevokeAgent() public {
         // Scenario 8
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         vm.prank(owner);
         vault.setAgent(address(0));
@@ -557,10 +565,17 @@ contract CountersignVaultTest is BaseTest {
     }
 
     function test_GuardianRotationInvalidatesOldPermits() public {
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         vm.prank(owner);
-        vault.setGuardian(vm.addr(0x9999));
+        vault.setCommittee(committeeOf(vm.addr(0x9999)), 1);
+        // the committee is part of the policy: every outstanding permit dies at once
+        vm.prank(agent);
+        vm.expectRevert(CountersignVault.PolicyMismatch.selector);
+        vault.execute(path, p, sig);
+        // and the removed guardian cannot sign for the new policy either
+        p.policyHash = vault.policyHash();
+        sig = sign(p, guardianPk);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.InvalidPermit.selector);
         vault.execute(path, p, sig);
@@ -578,7 +593,7 @@ contract CountersignVaultTest is BaseTest {
             vm.expectRevert(CountersignVault.NotOwner.selector);
             vault.setAgent(callers[i]);
             vm.expectRevert(CountersignVault.NotOwner.selector);
-            vault.setGuardian(callers[i]);
+            vault.setCommittee(committeeOf(callers[i]), 1);
             vm.expectRevert(CountersignVault.NotOwner.selector);
             vault.withdraw(address(usdt), 1);
             vm.expectRevert(CountersignVault.NotOwner.selector);
@@ -739,7 +754,7 @@ contract CountersignVaultTest is BaseTest {
 
     function testFuzz_OnlyAgentCanExecute(address caller) public {
         vm.assume(caller != agent);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), 10e6);
         vm.prank(caller);
         vm.expectRevert(CountersignVault.NotAgent.selector);
@@ -750,7 +765,7 @@ contract CountersignVaultTest is BaseTest {
         pk = bound(pk, 1, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364140);
         vm.assume(pk != guardianPk);
         (bytes memory path, CountersignVault.ExecutionPermit memory p,) = buyPermit(address(whsk), 10e6);
-        bytes memory sig = sign(p, pk);
+        bytes[] memory sig = sign(p, pk);
         vm.prank(agent);
         vm.expectRevert(CountersignVault.InvalidPermit.selector);
         vault.execute(path, p, sig);
@@ -758,7 +773,7 @@ contract CountersignVaultTest is BaseTest {
 
     function testFuzz_CapAlwaysEnforced(uint256 amountIn) public {
         amountIn = bound(amountIn, 50e6 + 1, 500e6);
-        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes memory sig) =
+        (bytes memory path, CountersignVault.ExecutionPermit memory p, bytes[] memory sig) =
             buyPermit(address(whsk), amountIn);
         vm.prank(agent);
         vm.expectRevert(abi.encodeWithSelector(CountersignVault.TradeTooLarge.selector, amountIn, 50e6));
@@ -805,7 +820,7 @@ contract CountersignVaultTest is BaseTest {
         fees[1] = FEE;
         VaultFactory f = new VaultFactory(implementation);
         vm.prank(owner);
-        v = CountersignVault(f.createVault(agent, guardian, address(usdt), assets, fees, defaultMandate()));
+        v = CountersignVault(f.createVault(agent, committee1(), 1, address(usdt), assets, fees, defaultMandate()));
     }
 
     function _permitFor(
@@ -823,10 +838,10 @@ contract CountersignVaultTest is BaseTest {
     function _signFor(CountersignVault v, CountersignVault.ExecutionPermit memory p)
         internal
         view
-        returns (bytes memory)
+        returns (bytes[] memory)
     {
         (uint8 vv, bytes32 r, bytes32 s) = vm.sign(guardianPk, v.permitDigest(p));
-        return abi.encodePacked(r, s, vv);
+        return one(abi.encodePacked(r, s, vv));
     }
 }
 

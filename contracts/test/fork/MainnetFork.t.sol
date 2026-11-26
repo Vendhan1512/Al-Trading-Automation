@@ -75,10 +75,16 @@ contract MainnetForkTest is Test {
             minEdgeBps: 30,
             tiersMask: 7,
             assetsMask: 7,
-            expiry: uint64(block.timestamp + 7 days)
+            expiry: uint64(block.timestamp + 7 days),
+            minNetValueQuote: 0,
+            stopLossBps: 300,
+            takeProfitBps: 0,
+            maxDrawdownBps: 2000
         });
+        address[] memory committee = new address[](1);
+        committee[0] = guardian;
         vm.prank(owner);
-        vault = CountersignVault(factory.createVault(agent, guardian, HSK.USDT, assets, fees, m));
+        vault = CountersignVault(factory.createVault(agent, committee, 1, HSK.USDT, assets, fees, m));
         deal(HSK.USDT, address(vault), 20e6);
         assertEq(IERC20(HSK.USDT).balanceOf(address(vault)), 20e6, "deal USDT");
     }
@@ -90,7 +96,7 @@ contract MainnetForkTest is Test {
 
     function _permit(bytes memory path, uint8 tier, uint256 amountIn, uint256 minOut, uint256 ref)
         internal
-        returns (CountersignVault.ExecutionPermit memory p, bytes memory sig)
+        returns (CountersignVault.ExecutionPermit memory p, bytes[] memory sig)
     {
         p = CountersignVault.ExecutionPermit({
             tradeId: keccak256(abi.encode("fork", ++n)),
@@ -99,14 +105,15 @@ contract MainnetForkTest is Test {
             amountIn: amountIn,
             minOut: minOut,
             refAmountOut: ref,
-            expectedNetValue: 0,
+            expectedNetValue: 1,
             predictionHash: keccak256("fork prediction"),
             decisionHash: keccak256(abi.encode("decision", n)),
             policyHash: vault.policyHash(),
             deadline: uint64(block.timestamp + 120)
         });
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(guardianPk, vault.permitDigest(p));
-        sig = abi.encodePacked(r, s, v);
+        sig = new bytes[](1);
+        sig[0] = abi.encodePacked(r, s, v);
     }
 
     function _quote(address tIn, address tOut, uint256 amountIn) internal returns (uint256 out) {
@@ -116,7 +123,7 @@ contract MainnetForkTest is Test {
     function _buy(address asset, uint256 amountIn) internal returns (uint256 out) {
         bytes memory path = abi.encodePacked(HSK.USDT, uint24(3000), asset);
         uint256 q = _quote(HSK.USDT, asset, amountIn);
-        (CountersignVault.ExecutionPermit memory p, bytes memory sig) = _permit(path, 3, amountIn, q * 995 / 1000, 0);
+        (CountersignVault.ExecutionPermit memory p, bytes[] memory sig) = _permit(path, 3, amountIn, q * 995 / 1000, 0);
         uint256 g = gasleft();
         vm.prank(agent);
         out = vault.execute(path, p, sig);
@@ -138,7 +145,7 @@ contract MainnetForkTest is Test {
 
         bytes memory path = abi.encodePacked(HSK.WHSK, uint24(3000), HSK.USDT);
         uint256 qs = _quote(HSK.WHSK, HSK.USDT, got);
-        (CountersignVault.ExecutionPermit memory p, bytes memory sig) = _permit(path, 0, got, qs * 995 / 1000, 0);
+        (CountersignVault.ExecutionPermit memory p, bytes[] memory sig) = _permit(path, 0, got, qs * 995 / 1000, 0);
         vm.prank(agent);
         uint256 back = vault.execute(path, p, sig);
         (, int128 pnl) = vault.currentDay();
@@ -158,7 +165,7 @@ contract MainnetForkTest is Test {
 
     function test_Fork_TwapFloorRejectsWorthlessMinOut() public onlyFork {
         bytes memory path = abi.encodePacked(HSK.USDT, uint24(3000), HSK.WHSK);
-        (CountersignVault.ExecutionPermit memory p, bytes memory sig) = _permit(path, 3, 2e6, 1, 0);
+        (CountersignVault.ExecutionPermit memory p, bytes[] memory sig) = _permit(path, 3, 2e6, 1, 0);
         vm.prank(agent);
         vm.expectPartialRevert(CountersignVault.BelowTwapFloor.selector);
         vault.execute(path, p, sig);
@@ -171,7 +178,7 @@ contract MainnetForkTest is Test {
         (uint256 q,,,) = quoter.quoteExactInput(path, 2e6);
         console2.log("cycle quote for 2 USDT:", q);
         assertLt(q, 2e6);
-        (CountersignVault.ExecutionPermit memory p, bytes memory sig) = _permit(path, 1, 2e6, 2e6 + 1000, 0);
+        (CountersignVault.ExecutionPermit memory p, bytes[] memory sig) = _permit(path, 1, 2e6, 2e6 + 1000, 0);
         uint256 before = IERC20(HSK.USDT).balanceOf(address(vault));
         vm.prank(agent);
         vm.expectRevert();
@@ -185,7 +192,9 @@ contract MainnetForkTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(agentPk, vault.permitDigest(p));
         vm.prank(agent);
         vm.expectRevert(CountersignVault.InvalidPermit.selector);
-        vault.execute(path, p, abi.encodePacked(r, s, v));
+        bytes[] memory forged = new bytes[](1);
+        forged[0] = abi.encodePacked(r, s, v);
+        vault.execute(path, p, forged);
     }
 
     function test_Fork_OwnerWithdrawsEverything() public onlyFork {
@@ -199,5 +208,58 @@ contract MainnetForkTest is Test {
         vm.stopPrank();
         assertEq(IERC20(HSK.USDT).balanceOf(owner), 18e6);
         assertEq(IERC20(HSK.WHSK).balanceOf(owner), whskBal);
+    }
+}
+
+interface IRouterSingle {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata) external payable returns (uint256);
+}
+
+/// @notice v2 permissionless stop-loss on the REAL HSKSwap WHSK/USDT pool (mainnet fork).
+contract MainnetForkStopTest is MainnetForkTest {
+    function _dump(uint256 whskAmount) internal {
+        address whale = makeAddr("whale");
+        deal(HSK.WHSK, whale, whskAmount);
+        vm.startPrank(whale);
+        IERC20(HSK.WHSK).approve(HSK.SWAP_ROUTER_02, whskAmount);
+        IRouterSingle(HSK.SWAP_ROUTER_02)
+            .exactInputSingle(IRouterSingle.ExactInputSingleParams(HSK.WHSK, HSK.USDT, 3000, whale, whskAmount, 0, 0));
+        vm.stopPrank();
+    }
+
+    function test_Fork_WickCannotTriggerTheStop() public onlyFork {
+        uint256 got = _buy(HSK.WHSK, 3e6);
+        _dump(1_500_000e18); // a large one-block dump
+        (uint256 twapValue, uint256 cost, bool stopNow,) = vault.stopStatus(HSK.WHSK);
+        console2.log("after wick: twap value / cost", twapValue, cost);
+        assertFalse(stopNow, "a one-block wick must not fire a TWAP stop");
+        vm.expectPartialRevert(CountersignVault.StopNotTriggered.selector);
+        vault.stopOut(HSK.WHSK, got, 0);
+    }
+
+    function test_Fork_SustainedCrashFiresTheStop_AnyoneCanCallIt() public onlyFork {
+        uint256 got = _buy(HSK.WHSK, 3e6);
+        _dump(1_500_000e18);
+        vm.warp(block.timestamp + 1800); // the crash holds for the whole TWAP window
+        vm.roll(block.number + 900);
+        (uint256 twapValue, uint256 cost, bool stopNow,) = vault.stopStatus(HSK.WHSK);
+        console2.log("after 30 min: twap value / cost", twapValue, cost);
+        assertTrue(stopNow);
+        vm.prank(makeAddr("anyKeeper"));
+        uint256 out = vault.stopOut(HSK.WHSK, got, 0);
+        console2.log("stop sold for (USDT raw):", out);
+        (uint128 qty,) = vault.positions(HSK.WHSK);
+        assertEq(qty, 0);
+        assertGt(vault.reentryBlockedUntil(HSK.WHSK), block.timestamp);
     }
 }

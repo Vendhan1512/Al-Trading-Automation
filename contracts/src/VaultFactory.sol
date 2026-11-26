@@ -14,7 +14,9 @@ contract VaultFactory {
     mapping(address => bool) public isVault;
     address[] public allVaults;
 
-    event VaultCreated(address indexed owner, address indexed vault, address agent, address guardian);
+    event VaultCreated(
+        address indexed owner, address indexed vault, address agent, address[] guardians, uint8 threshold
+    );
 
     constructor(address implementation_) {
         implementation = implementation_;
@@ -22,7 +24,8 @@ contract VaultFactory {
 
     function createVault(
         address agent,
-        address guardian,
+        address[] calldata guardians,
+        uint8 threshold,
         address quote,
         address[] calldata assets,
         uint24[] calldata assetFees,
@@ -34,7 +37,8 @@ contract VaultFactory {
                 CountersignVault.InitParams({
                     owner: msg.sender,
                     agent: agent,
-                    guardian: guardian,
+                    guardians: guardians,
+                    threshold: threshold,
                     quote: quote,
                     assets: assets,
                     assetFees: assetFees,
@@ -44,7 +48,7 @@ contract VaultFactory {
         _vaultsOf[msg.sender].push(vault);
         isVault[vault] = true;
         allVaults.push(vault);
-        emit VaultCreated(msg.sender, vault, agent, guardian);
+        emit VaultCreated(msg.sender, vault, agent, guardians, threshold);
     }
 
     function vaultsOf(address owner) external view returns (address[] memory) {
