@@ -10,6 +10,9 @@ export interface MandateChanges {
   dailyVolumeUsdt?: number;
   maxExposureUsdt?: number;
   minEdgeBps?: number;
+  stopLossPct?: number; // v2 permissionless stop-loss (0 = off)
+  takeProfitPct?: number; // v2 permissionless take-profit (0 = off)
+  maxDrawdownPct?: number; // v2 NAV breaker (0 = off)
 }
 
 export const ASSET_ORDER = ["WHSK", "WETH", "WBTC"] as const;
@@ -57,6 +60,10 @@ export function applyChanges(current: Mandate, ch: MandateChanges, quoteDecimals
   if (ch.cooldownSec !== undefined) p.cooldown = Math.max(0, Math.round(ch.cooldownSec));
   if (ch.minEdgeBps !== undefined) p.minEdgeBps = Math.max(0, Math.round(ch.minEdgeBps));
   if (ch.riskAppetite) Object.assign(p, riskPreset(ch.riskAppetite, current));
+  const bps = (pct: number) => Math.max(0, Math.min(9_999, Math.round(pct * 100)));
+  if (ch.stopLossPct !== undefined) p.stopLossBps = bps(ch.stopLossPct);
+  if (ch.takeProfitPct !== undefined) p.takeProfitBps = bps(ch.takeProfitPct);
+  if (ch.maxDrawdownPct !== undefined) p.maxDrawdownBps = bps(ch.maxDrawdownPct);
   if (ch.targetAssets) {
     p.assetsMask = ch.targetAssets.reduce((m, a) => m | (1 << ASSET_ORDER.indexOf(a)), 0) & ((1 << assetCount) - 1);
     if (p.assetsMask === 0) notes.push("no target assets selected — the agent will not open new positions");
@@ -79,6 +86,13 @@ export function applyChanges(current: Mandate, ch: MandateChanges, quoteDecimals
   add("tiersMask", "Strategy tiers", mask(current.tiersMask, tierNames), mask(p.tiersMask, tierNames), (p.tiersMask & ~current.tiersMask) === 0 && p.tiersMask !== current.tiersMask, (p.tiersMask & ~current.tiersMask) !== 0);
   add("assetsMask", "Target assets", mask(current.assetsMask, ASSET_ORDER), mask(p.assetsMask, ASSET_ORDER), (p.assetsMask & ~current.assetsMask) === 0 && p.assetsMask !== current.assetsMask, (p.assetsMask & ~current.assetsMask) !== 0);
 
+  // v2 limits where 0 = off: tighter = switching on, or lowering a non-zero value
+  const offOr = (b: number) => (b === 0 ? "off" : `${(b / 100).toFixed(2)}%`);
+  const tb = (c: number, n: number) => c === 0 ? n !== 0 : n !== 0 && n < c;
+  const lb = (c: number, n: number) => c !== 0 && (n === 0 || n > c);
+  add("stopLossBps", "Stop-loss (permissionless, TWAP)", offOr(current.stopLossBps), offOr(p.stopLossBps), tb(current.stopLossBps, p.stopLossBps), lb(current.stopLossBps, p.stopLossBps));
+  add("takeProfitBps", "Take-profit (permissionless, TWAP)", offOr(current.takeProfitBps), offOr(p.takeProfitBps), tb(current.takeProfitBps, p.takeProfitBps), lb(current.takeProfitBps, p.takeProfitBps));
+  add("maxDrawdownBps", "Drawdown breaker (NAV)", offOr(current.maxDrawdownBps), offOr(p.maxDrawdownBps), tb(current.maxDrawdownBps, p.maxDrawdownBps), lb(current.maxDrawdownBps, p.maxDrawdownBps));
   const changedRows = rows.filter((r) => r.direction !== "same");
   return { current, proposed: p, rows: changedRows, tighterOnly: isTighter(current, p), changed: changedRows.length > 0, notes };
 }
@@ -97,9 +111,16 @@ export function isTighter(c: Mandate, m: Mandate): boolean {
     m.minEdgeBps < c.minEdgeBps ||
     (m.tiersMask & ~c.tiersMask) !== 0 ||
     (m.assetsMask & ~c.assetsMask) !== 0 ||
-    m.expiry > c.expiry
+    m.expiry > c.expiry ||
+    m.minNetValueQuote < c.minNetValueQuote ||
+    !tighterBps(c.stopLossBps, m.stopLossBps) ||
+    !tighterBps(c.takeProfitBps, m.takeProfitBps) ||
+    !tighterBps(c.maxDrawdownBps, m.maxDrawdownBps)
   );
 }
+
+/** Mirror of CountersignVault._tighterBps: 0 = off; tighter = switching on or lowering. */
+export const tighterBps = (cur: number, next: number) => (cur === 0 ? true : next !== 0 && next <= cur);
 
 /** Mandate as JSON-safe strings (bigints) for the API / browser. */
 export const mandateToJson = (m: Mandate) => Object.fromEntries(Object.entries(m).map(([k, v]) => [k, typeof v === "bigint" ? v.toString() : v]));
@@ -116,4 +137,8 @@ export const mandateFromJson = (o: Record<string, string | number>): Mandate => 
   tiersMask: Number(o.tiersMask),
   assetsMask: Number(o.assetsMask),
   expiry: BigInt(o.expiry!),
+  minNetValueQuote: BigInt(o.minNetValueQuote ?? 0),
+  stopLossBps: Number(o.stopLossBps ?? 0),
+  takeProfitBps: Number(o.takeProfitBps ?? 0),
+  maxDrawdownBps: Number(o.maxDrawdownBps ?? 0),
 });

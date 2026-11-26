@@ -39,6 +39,7 @@ contract E2ETestnet is Script {
         uint256 ownerPk = vm.envUint("TEST_OWNER_PK");
         uint256 agentPk = vm.envUint("AGENT_PK");
         uint256 guardianPk = vm.envUint("GUARDIAN_PK");
+        uint256 riskPk = vm.envUint("RISK_OFFICER_PK");
         address factory = vm.parseJsonAddress(vm.readFile("./deployments/133.json"), ".vaultFactory");
 
         address[] memory assets = new address[](1);
@@ -63,13 +64,15 @@ contract E2ETestnet is Script {
             takeProfitBps: 0,
             maxDrawdownBps: 0
         });
-        address[] memory committee = new address[](1);
+        // v2: a 2-of-2 committee — Execution Guardian + Risk Officer, each its own key
+        address[] memory committee = new address[](2);
         committee[0] = vm.addr(guardianPk);
+        committee[1] = vm.addr(riskPk);
 
         // 1) test owner creates the vault and deposits 0.01 WHSK with a TWAP cost basis
         vm.startBroadcast(ownerPk);
         CountersignVault vault =
-            CountersignVault(VaultFactory(factory).createVault(vm.addr(agentPk), committee, 1, USDT, assets, fees, m));
+            CountersignVault(VaultFactory(factory).createVault(vm.addr(agentPk), committee, 2, USDT, assets, fees, m));
         IWETH(WHSK).deposit{value: 0.01 ether}();
         IWETH(WHSK).approve(address(vault), 0.01 ether);
         vault.depositAsset(WHSK, 0.01 ether);
@@ -94,27 +97,43 @@ contract E2ETestnet is Script {
             deadline: uint64(block.timestamp + 600)
         });
         bytes32 digest = vault.permitDigest(p);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(guardianPk, digest);
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(agentPk, digest);
+        bytes memory gSig = _sig(guardianPk, digest);
+        bytes memory rSig = _sig(riskPk, digest);
+        bytes memory aSig = _sig(agentPk, digest);
 
-        // 3) attack check (simulated): the agent with a self-signed permit is refused
-        vm.prank(vm.addr(agentPk));
+        // 3a) attack (simulated): the agent with a self-signed permit is refused
         bytes[] memory selfSigned = new bytes[](1);
-        selfSigned[0] = abi.encodePacked(r2, s2, v2);
-        bytes[] memory countersigned = new bytes[](1);
-        countersigned[0] = abi.encodePacked(r, s, v);
+        selfSigned[0] = aSig;
+        vm.prank(vm.addr(agentPk));
         try vault.execute(path, p, selfSigned) {
             revert("SECURITY FAILURE: self-signed permit accepted");
         } catch (bytes memory err) {
             require(bytes4(err) == CountersignVault.InvalidPermit.selector, "unexpected error");
             console2.log("Self-signed permit refused: InvalidPermit()");
         }
+        // 3b) veto (simulated): one committee member is not enough
+        bytes[] memory onlyGuardian = new bytes[](1);
+        onlyGuardian[0] = gSig;
+        vm.prank(vm.addr(agentPk));
+        try vault.execute(path, p, onlyGuardian) {
+            revert("SECURITY FAILURE: 1-of-2 accepted");
+        } catch (bytes memory err) {
+            require(bytes4(err) == CountersignVault.NotEnoughSignatures.selector, "unexpected error");
+            console2.log("Guardian alone refused: NotEnoughSignatures(1, 2)");
+        }
 
-        // 4) the agent submits the Guardian-countersigned permit (real tx)
+        // 4) the agent submits the 2-of-2 committee-signed permit (real tx)
+        bytes[] memory committeeSigs = new bytes[](2);
+        (committeeSigs[0], committeeSigs[1]) = vm.addr(guardianPk) < vm.addr(riskPk) ? (gSig, rSig) : (rSig, gSig);
         vm.startBroadcast(agentPk);
-        uint256 out = vault.execute(path, p, countersigned);
+        uint256 out = vault.execute(path, p, committeeSigs);
         vm.stopBroadcast();
-        console2.log("Countersigned SELL executed, USDT out:", out);
+        console2.log("Committee-signed SELL executed, USDT out:", out);
         console2.logBytes32(p.tradeId);
+    }
+
+    function _sig(uint256 pk, bytes32 digest) internal pure returns (bytes memory) {
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
+        return abi.encodePacked(r, s, v);
     }
 }

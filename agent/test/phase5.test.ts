@@ -41,7 +41,7 @@ class FakeChain implements ChainOps {
   private n = 0;
   async usedTradeId(_v: Address, id: Hex) { return this.used.has(id); }
   async simulate() { return this.simError ? { ok: false as const, error: this.simError } : { ok: true as const }; }
-  async send(_v: Address, _p: Hex, _permit: PermitJson, _s: Hex, nonce: number, gasPrice: bigint) {
+  async send(_v: Address, _p: Hex, _permit: PermitJson, _s: Hex[], nonce: number, gasPrice: bigint) {
     const h = tid(0xabc000 + ++this.n);
     this.sent.push({ nonce, gasPrice, kind: "execute" });
     this.mempool.add(h);
@@ -59,6 +59,8 @@ class FakeChain implements ChainOps {
   async txExists(h: Hex) { return this.mempool.has(h); }
   async fillLogs(_v: Address, id: Hex) { return { logs: [fillLog(id, 5_000_000n, 82_000n, 0n)], txHash: tid(0xfeed), blockNumber: 101n }; }
   async pause() { return tid(0x9a05e); }
+  async stopOut() { return tid(0x5709); }
+  async checkBreaker() { return tid(0xb4ea); }
   async tighten() { return tid(0x7167); }
   mine(hash: Hex, tradeId: Hex, status: "success" | "reverted" = "success") {
     this.receipts.set(hash, { status, blockNumber: 100n, gasUsed: 250_000n, effectiveGasPrice: 500_000_000_000n, logs: status === "success" ? [fillLog(tradeId, 5_000_000n, 82_000n, 0n)] : [] });
@@ -70,7 +72,7 @@ class FakeChain implements ChainOps {
 
 function meta(n: number, deadline = Math.floor(NOW / 1000) + 120): TxMeta {
   const permit: PermitJson = { tradeId: tid(n), tier: 2, pathHash: Z, amountIn: "5000000", minOut: "80000", refAmountOut: "81000", expectedNetValue: "15000", predictionHash: Z, decisionHash: Z, policyHash: Z, deadline };
-  return { vault: VAULT, proposalId: `p-${n}`, asset: "WBTC", side: "BUY", tier: "B", path: "0x" as Hex, permit, signature: "0x" as Hex, predictionHash: null };
+  return { vault: VAULT, proposalId: `p-${n}`, asset: "WBTC", side: "BUY", tier: "B", path: "0x" as Hex, permit, signatures: ["0x" as Hex], predictionHash: null };
 }
 
 function setup() {

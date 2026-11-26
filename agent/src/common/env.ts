@@ -7,14 +7,15 @@ import { resolve } from "node:path";
  * Both processes read the same local .env file, but each only loads its own keys and refuses
  * to start if the other role's key is present in its environment.
  */
-export type Role = "agent" | "guardian";
+export type Role = "agent" | "guardian" | "risk";
 
-const SECRET_OF: Record<Role, string> = { agent: "AGENT_PK", guardian: "GUARDIAN_PK" };
+const SECRET_OF: Record<Role, string> = { agent: "AGENT_PK", guardian: "GUARDIAN_PK", risk: "RISK_OFFICER_PK" };
 const FORBIDDEN: Record<Role, string[]> = {
-  agent: ["GUARDIAN_PK", "TEST_OWNER_PK", "OWNER_PK"],
-  guardian: ["AGENT_PK", "DEPLOYER_PK", "TEST_OWNER_PK", "OWNER_PK"],
+  agent: ["GUARDIAN_PK", "RISK_OFFICER_PK", "TEST_OWNER_PK", "OWNER_PK"],
+  guardian: ["AGENT_PK", "RISK_OFFICER_PK", "DEPLOYER_PK", "TEST_OWNER_PK", "OWNER_PK"],
+  risk: ["AGENT_PK", "GUARDIAN_PK", "DEPLOYER_PK", "TEST_OWNER_PK", "OWNER_PK"],
 };
-const SHARED = ["AGENT", "GUARDIAN", "OWNER", "VAULT", "VAULT_TESTNET", "GUARDIAN_URL", "HSK_MAINNET_RPC", "HSK_TESTNET_RPC", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "STRATEGIST_MODEL", "AGENT_MODE", "MONITOR_INTERVAL_SEC", "COUNTERSIGN_DB", "PORT", "GUARDIAN_PORT"];
+const SHARED = ["AGENT", "GUARDIAN", "RISK_OFFICER", "RISK_URL", "RISK_PORT", "RISK_OFFICER_MODEL", "OWNER", "VAULT", "VAULT_TESTNET", "GUARDIAN_URL", "HSK_MAINNET_RPC", "HSK_TESTNET_RPC", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "STRATEGIST_MODEL", "AGENT_MODE", "MONITOR_INTERVAL_SEC", "COUNTERSIGN_DB", "PORT", "GUARDIAN_PORT"];
 
 export function parseDotenv(text: string): Record<string, string> {
   const out: Record<string, string> = {};

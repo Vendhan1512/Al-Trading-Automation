@@ -18,7 +18,7 @@ export const PERMIT_TYPES = {
   ],
 } as const;
 
-export const domainFor = (chainId: number, vault: Address) => ({ name: "Countersign", version: "1", chainId, verifyingContract: vault }) as const;
+export const domainFor = (chainId: number, vault: Address) => ({ name: "Countersign", version: "2", chainId, verifyingContract: vault }) as const;
 
 export const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as const;
 

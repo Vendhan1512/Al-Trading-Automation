@@ -81,8 +81,8 @@ export class GuardianService {
       const isVault = await this.client.readContract({ address: this.net.vaultFactory, abi: vaultFactoryAbi, functionName: "isVault", args: [p.vault as Address] });
       if (!isVault) return base({ proposalId: p.proposalId, reasons: ["vault not created by the Countersign factory"] });
       vault = await readVaultState(this.client, this.net, p.vault as Address);
-      if (vault.guardian?.toLowerCase() !== this.address.toLowerCase())
-        return base({ proposalId: p.proposalId, reasons: [`this Guardian (${this.address}) is not the vault's guardian (${vault.guardian})`] });
+      if (!vault.guardians.some((g) => g.toLowerCase() === this.address.toLowerCase()))
+        return base({ proposalId: p.proposalId, reasons: [`this Guardian (${this.address}) is not on the vault's committee (${vault.guardians.join(", ")})`] });
     } else {
       if (!opts.dryRun) return base({ proposalId: p.proposalId, reasons: ["paper proposals are dry-run only"] });
       vault = paperVaultState(this.net);
@@ -192,7 +192,11 @@ export class GuardianService {
       amountIn: leg.amountIn,
       minOut: leg.minOut,
       refAmountOut: ((v.refAmountOut * BigInt(leg.amountIn)) / amountIn).toString(),
-      expectedNetValue: BigInt(Math.round(v.expectedNetValueUsdt * 10 ** pool.quote.decimals)).toString(),
+      // the vault refuses entries with a non-positive signed expectation; never round a positive one to 0
+      expectedNetValue: (() => {
+        const raw = BigInt(Math.round(v.expectedNetValueUsdt * 10 ** pool.quote.decimals));
+        return (raw <= 0n && v.expectedNetValueUsdt > 0 ? 1n : raw).toString();
+      })(),
       predictionHash: (p.predictionHash as `0x${string}` | null) ?? ZERO32,
       decisionHash,
       policyHash: vault.policyHash,
@@ -201,22 +205,13 @@ export class GuardianService {
     const signature = await signPermit(this.account, this.net.chainId, p.vault as Address, permit);
 
     // 7) Simulate the exact call the agent will make. A revert here costs nobody gas.
-    try {
-      await this.client.simulateContract({
-        address: p.vault as Address,
-        abi: countersignVaultAbi,
-        functionName: "execute",
-        args: [path, toMessage(permit), signature],
-        account: vault.agent as Address,
-      });
-    } catch (e) {
-      let name = (e as Error).message.split("\n")[0];
-      if (e instanceof BaseError) {
-        const r = e.walk((x) => x instanceof ContractFunctionRevertedError);
-        if (r instanceof ContractFunctionRevertedError) name = r.data?.errorName ?? r.reason ?? name;
-      }
-      const soft = /Cooldown|BelowTwapFloor|Too little received/.test(name ?? "");
-      return { ...resp, decision: soft ? "WAIT" : "REJECT", reasons: [...resp.reasons, `simulation reverted: ${name}`], simulation: { ok: false, error: name } };
+    //    With a k > 1 committee this one signature cannot pass on its own: NotEnoughSignatures is
+    //    the only acceptable revert, and it is reached only after every other check passed.
+    const sim = await simulateExecute(this.client, p.vault as Address, path, permit, [signature], vault.agent as Address);
+    const partial = !sim.ok && sim.error === "NotEnoughSignatures" && vault.threshold > 1;
+    if (!sim.ok && !partial) {
+      const soft = /Cooldown|BelowTwapFloor|Too little received|ReentryLocked/.test(sim.error);
+      return { ...resp, decision: soft ? "WAIT" : "REJECT", reasons: [...resp.reasons, `simulation reverted: ${sim.error}`], simulation: { ok: false, error: sim.error } };
     }
 
     const isBuy = p.side === "BUY";
@@ -228,6 +223,33 @@ export class GuardianService {
       exposure: isBuy ? BigInt(leg.amountIn) : 0n,
       until: permit.deadline,
     });
-    return { ...resp, permit, signature, simulation: { ok: true } };
+    return { ...resp, permit, signature, simulation: partial ? { ok: true, error: "awaiting committee co-signatures" } : { ok: true } };
   }
+}
+
+/** Simulates vault.execute from the agent address; returns the decoded revert name on failure. */
+export async function simulateExecute(
+  client: PublicClient,
+  vault: Address,
+  path: `0x${string}`,
+  permit: PermitJson,
+  sigs: `0x${string}`[],
+  agent: Address,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    await client.simulateContract({ address: vault, abi: countersignVaultAbi, functionName: "execute", args: [path, toMessage(permit), sigs], account: agent });
+    return { ok: true };
+  } catch (e) {
+    let name = firstLine((e as Error).message);
+    if (e instanceof BaseError) {
+      const r = e.walk((x) => x instanceof ContractFunctionRevertedError);
+      if (r instanceof ContractFunctionRevertedError) name = r.data?.errorName ?? r.reason ?? name;
+    }
+    return { ok: false, error: name };
+  }
+}
+
+function firstLine(s: string): string {
+  const i = s.search(/[\r\n]/);
+  return i === -1 ? s : s.slice(0, i);
 }

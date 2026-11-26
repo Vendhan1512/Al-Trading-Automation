@@ -1,0 +1,11 @@
+{
+  "assets": [
+    "0xCA8aAceEC5Db1e91B9Ed3a344bA026c4a2B3ebF6"
+  ],
+  "chainId": 133,
+  "implementation": "0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF",
+  "quote": "0x98B6173A8B7DFc52ce8bc88f1184a918A1CCaa4F",
+  "router": "0xa6914E66690c6794244B5f66a09eAEbf66254237",
+  "v3Factory": "0x2dC2c21D1049F786C535bF9d45F999dB5474f3A0",
+  "vaultFactory": "0x28ae19424647A051b95944DB26ffC0102085fBfE"
+}

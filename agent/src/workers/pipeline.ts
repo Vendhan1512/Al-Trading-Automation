@@ -9,7 +9,9 @@ import { canonicalJson, makePrediction, type Prediction } from "../modules/predi
 import { paperVaultState, readVaultState, tierBit, type VaultState } from "../modules/vault/state.js";
 import { evaluatePositions, gradePredictions } from "../modules/positions/positions.js";
 import { circuitBreaker, computeMetrics } from "../modules/strategy-health/health.js";
-import type { GuardianClient } from "../modules/execution/guardian-client.js";
+import type { GuardianClient, RiskClient } from "../modules/execution/guardian-client.js";
+import type { CosignResponse } from "../guardian/risk-officer.js";
+import { countersignVaultAbi } from "../abi/countersignVault.js";
 import type { ChainOps, TxManager } from "../modules/transactions/tx-manager.js";
 import type { GuardianResponse, Proposal } from "../guardian/types.js";
 import type { Candidate } from "../modules/strategies/types.js";
@@ -21,6 +23,7 @@ export interface PipelineCtx {
   client: PublicClient;
   store: Store;
   guardian: GuardianClient;
+  risk: RiskClient | null; // second committee member (v2)
   tx: TxManager | null; // live mode only
   ops: ChainOps | null; // live mode only (circuit-breaker actions)
   vault: Address | null;
@@ -53,25 +56,42 @@ function toRawAmount(c: Candidate, d: StrategistDecision, v: VaultState, net: Ne
   return qty > pos.qty ? pos.qty : qty;
 }
 
-/** Guardian → (live) submit → settle. Returns a one-line result and whether a fill confirmed. */
+/**
+ * Committee → (live) submit → settle.
+ * The Execution Guardian prices and signs; the Risk Officer independently re-checks and co-signs the
+ * SAME permit (or vetoes). The agent only submits when every reachable member approved.
+ */
 async function countersignAndExecute(
   ctx: PipelineCtx,
   proposal: Proposal,
   prediction: Prediction | null,
-): Promise<{ g: GuardianResponse | null; line: string; executed: boolean; txStatus: string | null; unreachable?: string }> {
+): Promise<{ g: GuardianResponse | null; risk: CosignResponse | null; line: string; executed: boolean; txStatus: string | null; unreachable?: string }> {
   const dryRun = ctx.mode !== "live" || !ctx.vault || !ctx.tx;
   const g = await ctx.guardian.evaluate(proposal, dryRun);
-  if ("unreachable" in g) return { g: null, line: `Guardian unreachable (${g.unreachable}); no trade without a countersignature`, executed: false, txStatus: null, unreachable: g.unreachable };
+  if ("unreachable" in g) return { g: null, risk: null, line: `Guardian unreachable (${g.unreachable}); no trade without a countersignature`, executed: false, txStatus: null, unreachable: g.unreachable };
   const e = g.economics;
   const econ = `${(e?.amountInUsdt ?? 0).toFixed(4)} USDT — edge ${e?.edgeBps?.toFixed(0) ?? "—"} bps, net ${(e?.expectedNetValueUsdt ?? 0).toFixed(4)} USDT`;
-  if (g.decision !== "APPROVE" || dryRun || !g.permit || !g.signature || !g.path) {
-    const tag = dryRun && g.decision === "APPROVE" ? "APPROVE(dry-run)" : g.decision;
-    return { g, line: `${tag} ${econ}${g.reasons.length ? ` — ${g.reasons.join("; ")}` : ""}`, executed: false, txStatus: null };
+  if (g.decision !== "APPROVE") return { g, risk: null, line: `Guardian ${g.decision} ${econ}${g.reasons.length ? ` — ${g.reasons.join("; ")}` : ""}`, executed: false, txStatus: null };
+
+  // second committee member
+  let risk: CosignResponse | null = null;
+  if (ctx.risk) {
+    const r = await ctx.risk.cosign({ proposal, permit: g.permit ?? undefined, path: g.path ?? undefined, guardianSignature: g.signature ?? undefined }, dryRun);
+    if ("unreachable" in r) return { g, risk: null, line: `Guardian APPROVE, Risk Officer unreachable (${r.unreachable}) — no trade without the committee`, executed: false, txStatus: null, unreachable: r.unreachable };
+    risk = r;
+    if (r.decision !== "APPROVE") return { g, risk, line: `Guardian APPROVE · Risk Officer ${r.decision} ${econ} — ${r.reasons.join("; ")}`, executed: false, txStatus: null };
   }
+  if (dryRun || !g.permit || !g.signature || !g.path) {
+    return { g, risk, line: `COMMITTEE APPROVE(dry-run) ${econ}${risk?.judgment ? ` — risk judgment (${risk.judgment.source}): ${risk.judgment.reason}` : ""}`, executed: false, txStatus: null };
+  }
+  // signatures ordered by signer address (the vault rejects any other order)
+  const signed: { by: string; sig: Hex }[] = [{ by: g.guardian, sig: g.signature }];
+  if (risk?.signature) signed.push({ by: risk.riskOfficer, sig: risk.signature });
+  signed.sort((a, b) => (BigInt(a.by) < BigInt(b.by) ? -1 : 1));
   ctx.inFlight.add(proposal.asset);
   try {
-    const sub = await ctx.tx!.submit({ vault: ctx.vault!, proposalId: proposal.proposalId, asset: proposal.asset, side: proposal.side, tier: proposal.tier, path: g.path, permit: g.permit, signature: g.signature, predictionHash: proposal.predictionHash });
-    if (sub.status !== "SUBMITTED") return { g, line: `APPROVE ${econ} — not sent: ${sub.status} (${sub.reason})`, executed: false, txStatus: sub.status };
+    const sub = await ctx.tx!.submit({ vault: ctx.vault!, proposalId: proposal.proposalId, asset: proposal.asset, side: proposal.side, tier: proposal.tier, path: g.path, permit: g.permit, signatures: signed.map((s) => s.sig), predictionHash: proposal.predictionHash });
+    if (sub.status !== "SUBMITTED") return { g, risk, line: `APPROVE ${econ} — not sent: ${sub.status} (${sub.reason})`, executed: false, txStatus: sub.status };
     const row = await ctx.tx!.settle(g.permit.tradeId);
     const status = row?.status ?? "UNKNOWN";
     if (status === "CONFIRMED" && prediction && proposal.predictionHash) {
@@ -89,7 +109,7 @@ async function countersignAndExecute(
         payload: prediction,
       });
     }
-    return { g, line: `APPROVE ${econ} — tx ${status} ${row?.hash ?? sub.hash}`, executed: status === "CONFIRMED", txStatus: status };
+    return { g, risk, line: `COMMITTEE APPROVE ${econ} — tx ${status} ${row?.hash ?? sub.hash}`, executed: status === "CONFIRMED", txStatus: status };
   } finally {
     ctx.inFlight.delete(proposal.asset);
     if (g.permit) await ctx.guardian.release(g.permit.tradeId);
@@ -132,15 +152,55 @@ export async function runPipeline(ctx: PipelineCtx, health: MarketHealth): Promi
   let approved = 0;
   let executed = 0;
   let exits = 0;
+  let exitsFired = 0;
+
+  // v2 keeper — permissionless on-chain stop-loss / take-profit and drawdown breaker.
+  //    These need no committee: the vault decides from its own TWAP; the agent key only pays gas.
+  const onchainStops = new Set<string>();
+  if (ctx.vault && vault.mode === "onchain") {
+    for (const p of vault.positions.filter((x) => x.qty > 0n)) {
+      try {
+        const [twapValue, cost, stopNow, tpNow] = (await ctx.client.readContract({ address: ctx.vault, abi: countersignVaultAbi, functionName: "stopStatus", args: [p.token] })) as readonly [bigint, bigint, boolean, boolean];
+        if (!stopNow && !tpNow) continue;
+        onchainStops.add(p.asset);
+        const kind = stopNow ? "STOP_LOSS" : "TAKE_PROFIT";
+        const detail = `TWAP value ${(Number(twapValue) / 1e6).toFixed(4)} vs cost ${(Number(cost) / 1e6).toFixed(4)} USDT`;
+        if (ctx.mode === "live" && ctx.ops) {
+          const h = await ctx.ops.stopOut(ctx.vault, p.token, p.qty);
+          await ctx.client.waitForTransactionReceipt({ hash: h, timeout: 120_000 }).catch(() => null);
+          journal("keeper", p.asset, "EXECUTED", `keeper fired permissionless ${kind} on ${p.asset} (${detail}) — tx ${h}`, { kind, twapValue, cost, tx: h });
+          exitsFired++;
+        } else journal("keeper", p.asset, "ADVISORY", `${kind} is triggered on ${p.asset} (${detail}); anyone may call stopOut()`, { kind, twapValue, cost });
+      } catch (e) {
+        journal("keeper", p.asset, "FAILED", `stopOut on ${p.asset} failed: ${(e as Error).message.split(/\r?\n/)[0]}`, {});
+      }
+    }
+    const m = vault.mandate;
+    if (m.maxDrawdownBps > 0 && vault.nav !== null) {
+      const floor = (vault.highWaterMark * BigInt(10_000 - m.maxDrawdownBps)) / 10_000n;
+      const newHigh = vault.nav * 1000n > vault.highWaterMark * 1005n; // > +0.5% above the stored mark
+      const breach = vault.highWaterMark > 0n && vault.nav < floor && !vault.breakerTripped;
+      if ((newHigh || breach) && ctx.mode === "live" && ctx.ops) {
+        try {
+          const h = await ctx.ops.checkBreaker(ctx.vault);
+          journal("keeper", null, breach ? "TRIPPED" : "HWM", `keeper called checkBreaker (${breach ? "drawdown breach" : "new NAV high"}; NAV ${(Number(vault.nav) / 1e6).toFixed(4)} USDT) — tx ${h}`, { nav: vault.nav, hwm: vault.highWaterMark, tx: h });
+        } catch (e) {
+          journal("keeper", null, "FAILED", `checkBreaker failed: ${(e as Error).message.split(/\r?\n/)[0]}`, {});
+        }
+      }
+    }
+  }
 
   // 16 — exits for open positions: deterministic, never routed through the LLM
   for (const pos of evaluatePositions(ctx.net, vault, health, ctx.store.predictions(), nowSec)) {
-    if (!pos.exit || ctx.inFlight.has(pos.asset)) continue;
+    if (!pos.exit || ctx.inFlight.has(pos.asset) || onchainStops.has(pos.asset)) continue;
+    // the on-chain stop-loss owns hard stops when the mandate enables it
+    if (pos.exit.reason === "STOP_LOSS" && vault.mandate.stopLossBps > 0) continue;
     const proposal: Proposal = { proposalId: `exit-${pos.asset}-${now}`, vault: ctx.vault, tier: "EXIT", asset: pos.asset as AssetSymbol, side: "SELL", amountIn: pos.qtyRaw.toString(), prediction: null, predictionHash: null, strategist: null, candidateId: null };
     const r = await countersignAndExecute(ctx, proposal, null);
     if (r.g?.decision === "APPROVE") approved++;
     if (r.executed) (executed++, exits++);
-    journal("exit", pos.asset, r.executed ? "EXECUTED" : (r.g?.decision ?? "WAIT"), `EXIT ${pos.asset} ${pos.exit.reason} (${pos.exit.detail}; uPnL ${pos.unrealizedPnlUsdt.toFixed(4)} USDT) — ${r.line}`, { position: { ...pos, qtyRaw: pos.qtyRaw.toString() }, proposal, guardian: r.g });
+    journal("exit", pos.asset, r.executed ? "EXECUTED" : (r.risk && r.risk.decision !== "APPROVE" ? r.risk.decision : (r.g?.decision ?? "WAIT")), `EXIT ${pos.asset} ${pos.exit.reason} (${pos.exit.detail}; uPnL ${pos.unrealizedPnlUsdt.toFixed(4)} USDT) — ${r.line}`, { position: { ...pos, qtyRaw: pos.qtyRaw.toString() }, proposal, guardian: r.g, risk: r.risk });
   }
 
   const cycles = scanCycles(ctx.net, now);
@@ -202,8 +262,8 @@ export async function runPipeline(ctx: PipelineCtx, health: MarketHealth): Promi
     const r = await countersignAndExecute(ctx, proposal, prediction);
     if (r.g?.decision === "APPROVE") approved++;
     if (r.executed) executed++;
-    const outcome = r.executed ? "EXECUTED" : r.unreachable ? "WAIT" : (r.g?.decision ?? "WAIT");
-    journal("candidate", c.asset, outcome, `${label} ${r.line}`, { ...base, strategist: d, regime: strat.regime, prediction, predictionHash, proposal, guardian: r.g, txStatus: r.txStatus });
+    const outcome = r.executed ? "EXECUTED" : r.unreachable ? "WAIT" : r.risk && r.risk.decision !== "APPROVE" ? r.risk.decision : (r.g?.decision ?? "WAIT");
+    journal("candidate", c.asset, outcome, `${label} ${r.line}`, { ...base, strategist: d, regime: strat.regime, prediction, predictionHash, proposal, guardian: r.g, risk: r.risk, txStatus: r.txStatus });
   }
 
   // 17–18 — strategy health; the breaker can only restrict (pause / drop tier C), never loosen
@@ -235,7 +295,7 @@ export async function runPipeline(ctx: PipelineCtx, health: MarketHealth): Promi
     taken: strat.decisions.filter((x) => x.action === "TAKE").length,
     approved,
     executed,
-    exits,
+    exits: exits + exitsFired,
     strategist: `${strat.source}${strat.note ? ` (${strat.note})` : ""}`,
     lines,
   };

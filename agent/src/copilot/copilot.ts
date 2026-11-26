@@ -175,6 +175,12 @@ export function parseMandateChanges(text: string): MandateChanges | null {
   if (loss !== undefined) c.dailyLossUsdt = loss;
   const every = /(?:once\s+)?every\s+(\d+(?:\.\d+)?)\s*(s|sec|secs|seconds|m|min|mins|minutes|h|hr|hrs|hours)\b/.exec(t);
   if (every) c.cooldownSec = Number(every[1]) * (every[2]!.startsWith("h") ? 3600 : every[2]!.startsWith("m") ? 60 : 1);
+  const sl = num(/stop[- ]?loss\D{0,10}?(\d+(?:\.\d+)?)\s*%/);
+  if (sl !== undefined) c.stopLossPct = sl;
+  const tp = num(/take[- ]?profit\D{0,10}?(\d+(?:\.\d+)?)\s*%/);
+  if (tp !== undefined) c.takeProfitPct = tp;
+  const dd = num(/draw\s*down\D{0,10}?(\d+(?:\.\d+)?)\s*%/);
+  if (dd !== undefined) c.maxDrawdownPct = dd;
   if (/\b(low risk|risk (?:to )?low|be (?:more )?careful|conservative|safer)\b/.test(t)) c.riskAppetite = "low";
   else if (/\b(medium risk|risk (?:to )?medium|moderate)\b/.test(t)) c.riskAppetite = "medium";
   else if (/\b(high risk|risk (?:to )?high|aggressive)\b/.test(t)) c.riskAppetite = "high";
@@ -276,6 +282,9 @@ export async function llmReply(ctx: CopilotCtx, history: ChatMessage[], client =
         dailyLossUsdt: z.number().optional(),
         dailyVolumeUsdt: z.number().optional(),
         maxExposureUsdt: z.number().optional(),
+        stopLossPct: z.number().optional().describe("permissionless stop-loss in % below average cost; 0 turns it off"),
+        takeProfitPct: z.number().optional().describe("permissionless take-profit in % above average cost; 0 turns it off"),
+        maxDrawdownPct: z.number().optional().describe("NAV drawdown breaker in %; 0 turns it off"),
       }),
       run: async (ch) => card("diff", await proposeMandateChange(ctx, ch)),
     }),

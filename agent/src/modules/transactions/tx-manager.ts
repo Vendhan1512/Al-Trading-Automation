@@ -23,8 +23,8 @@ import type { PermitJson } from "../../guardian/types.js";
 export interface ChainOps {
   agent: Address;
   usedTradeId(vault: Address, tradeId: Hex): Promise<boolean>;
-  simulate(vault: Address, path: Hex, permit: PermitJson, sig: Hex): Promise<{ ok: true } | { ok: false; error: string }>;
-  send(vault: Address, path: Hex, permit: PermitJson, sig: Hex, nonce: number, gasPrice: bigint): Promise<Hex>;
+  simulate(vault: Address, path: Hex, permit: PermitJson, sigs: Hex[]): Promise<{ ok: true } | { ok: false; error: string }>;
+  send(vault: Address, path: Hex, permit: PermitJson, sigs: Hex[], nonce: number, gasPrice: bigint): Promise<Hex>;
   sendCancel(nonce: number, gasPrice: bigint): Promise<Hex>;
   nonce(tag: "latest" | "pending"): Promise<number>;
   gasPrice(): Promise<bigint>;
@@ -34,6 +34,9 @@ export interface ChainOps {
   /** Circuit breaker: the agent may only restrict itself (the vault rejects anything looser). */
   pause(vault: Address): Promise<Hex>;
   tighten(vault: Address, mandate: import("../vault/state.js").Mandate): Promise<Hex>;
+  /** v2 keeper actions — permissionless on the vault; the agent key only pays the gas. */
+  stopOut(vault: Address, asset: Address, amountIn: bigint): Promise<Hex>;
+  checkBreaker(vault: Address): Promise<Hex>;
 }
 
 export type SubmitOutcome =
@@ -51,7 +54,7 @@ export interface TxMeta {
   tier: string;
   path: Hex;
   permit: PermitJson;
-  signature: Hex;
+  signatures: Hex[]; // committee signatures, sorted by signer address
   predictionHash: string | null;
 }
 
@@ -112,7 +115,7 @@ export class TxManager {
         this.store.txEvent(id, "ALREADY_EXECUTED", {});
         return { status: "ALREADY_EXECUTED", reason: "the vault has already consumed this tradeId" };
       }
-      const sim = await this.ops.simulate(m.vault, m.path, m.permit, m.signature);
+      const sim = await this.ops.simulate(m.vault, m.path, m.permit, m.signatures);
       if (!sim.ok) {
         this.store.txEvent(id, "SIMULATION_FAILED", { error: sim.error });
         return { status: "SIMULATION_FAILED", reason: sim.error };
@@ -120,7 +123,7 @@ export class TxManager {
       const nonce = await this.allocNonce();
       try {
         const gasPrice = await this.ops.gasPrice();
-        const hash = await this.ops.send(m.vault, m.path, m.permit, m.signature, nonce, gasPrice);
+        const hash = await this.ops.send(m.vault, m.path, m.permit, m.signatures, nonce, gasPrice);
         this.store.txUpsert({ tradeId: id, proposalId: m.proposalId, asset: m.asset, side: m.side, tier: m.tier, hash, nonce, status: "SUBMITTED", deadline: m.permit.deadline, payload: { ...m, gasPrice }, at: this.now() });
         return { status: "SUBMITTED", hash, nonce };
       } catch (e) {
@@ -210,7 +213,7 @@ export class TxManager {
       // Dropped: nothing will mine. Resubmitting the SAME permit at the SAME nonce is safe (single tradeId).
       if (t.attempts <= this.policy.maxResubmits && nowSec < t.deadline - 15) {
         const gasPrice = (BigInt(meta.gasPrice) * BigInt(100 + this.policy.gasBumpPct)) / 100n;
-        const newHash = await this.ops.send(meta.vault, meta.path, meta.permit, meta.signature, t.nonce!, gasPrice);
+        const newHash = await this.ops.send(meta.vault, meta.path, meta.permit, meta.signatures, t.nonce!, gasPrice);
         this.store.txUpsert({ tradeId: t.trade_id, proposalId: t.proposal_id, asset: t.asset, side: t.side, tier: t.tier, hash: newHash, nonce: t.nonce, status: "SUBMITTED", deadline: t.deadline, payload: { ...meta, gasPrice }, at: this.now() });
         return { tradeId: t.trade_id, from: t.status, to: "SUBMITTED", note: `dropped; resubmitted same permit at nonce ${t.nonce} with +${this.policy.gasBumpPct}% gas` };
       }
@@ -253,9 +256,9 @@ export function viemChainOps(client: PublicClient, net: NetworkConfig, agentPk: 
   return {
     agent: account.address,
     usedTradeId: (vault, id) => client.readContract({ address: vault, abi: countersignVaultAbi, functionName: "usedTradeIds", args: [id] }) as Promise<boolean>,
-    async simulate(vault, path, permit, sig) {
+    async simulate(vault, path, permit, sigs) {
       try {
-        await client.simulateContract({ address: vault, abi: countersignVaultAbi, functionName: "execute", args: [path, toMessage(permit), sig], account });
+        await client.simulateContract({ address: vault, abi: countersignVaultAbi, functionName: "execute", args: [path, toMessage(permit), sigs], account });
         return { ok: true };
       } catch (e) {
         let name = (e as Error).message.split("\n")[0]!;
@@ -266,8 +269,11 @@ export function viemChainOps(client: PublicClient, net: NetworkConfig, agentPk: 
         return { ok: false, error: name };
       }
     },
-    send: (vault, path, permit, sig, nonce, gasPrice) =>
-      wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "execute", args: [path, toMessage(permit), sig], nonce, gasPrice, gas: 450_000n, type: "legacy" }),
+    send: (vault, path, permit, sigs, nonce, gasPrice) =>
+      wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "execute", args: [path, toMessage(permit), sigs], nonce, gasPrice, gas: 600_000n, type: "legacy" }),
+    stopOut: (vault, asset, amountIn) =>
+      wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "stopOut", args: [asset, amountIn, 0n], gas: 600_000n, type: "legacy" }),
+    checkBreaker: (vault) => wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "checkBreaker", gas: 300_000n, type: "legacy" }),
     sendCancel: (nonce, gasPrice) => wallet.sendTransaction({ to: account.address, value: 0n, nonce, gasPrice, gas: 21_000n, type: "legacy" }),
     nonce: (tag) => client.getTransactionCount({ address: account.address, blockTag: tag }),
     gasPrice: () => client.getGasPrice(),

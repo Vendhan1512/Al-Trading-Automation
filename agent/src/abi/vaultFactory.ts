@@ -40,9 +40,14 @@ export const vaultFactoryAbi = [
         "internalType": "address"
       },
       {
-        "name": "guardian",
-        "type": "address",
-        "internalType": "address"
+        "name": "guardians",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "threshold",
+        "type": "uint8",
+        "internalType": "uint8"
       },
       {
         "name": "quote",
@@ -123,6 +128,26 @@ export const vaultFactoryAbi = [
             "name": "expiry",
             "type": "uint64",
             "internalType": "uint64"
+          },
+          {
+            "name": "minNetValueQuote",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "stopLossBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "takeProfitBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "maxDrawdownBps",
+            "type": "uint16",
+            "internalType": "uint16"
           }
         ]
       }
@@ -223,10 +248,16 @@ export const vaultFactoryAbi = [
         "internalType": "address"
       },
       {
-        "name": "guardian",
-        "type": "address",
+        "name": "guardians",
+        "type": "address[]",
         "indexed": false,
-        "internalType": "address"
+        "internalType": "address[]"
+      },
+      {
+        "name": "threshold",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
       }
     ],
     "anonymous": false

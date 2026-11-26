@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "agent": "tsx src/main.ts",
     "guardian": "tsx src/guardian/server.ts",
-    "abi": "node scripts/gen-abi.mjs"
+    "abi": "node scripts/gen-abi.mjs",
+    "risk": "tsx src/guardian/risk-server.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

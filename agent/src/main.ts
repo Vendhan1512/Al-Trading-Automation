@@ -6,7 +6,7 @@ import { Store } from "./common/store.js";
 import { startApi } from "./api/server.js";
 import { startMarketMonitor } from "./workers/market-monitor.js";
 import { runPipeline, type AgentMode } from "./workers/pipeline.js";
-import { GuardianClient } from "./modules/execution/guardian-client.js";
+import { GuardianClient, RiskClient } from "./modules/execution/guardian-client.js";
 import { TxManager, viemChainOps } from "./modules/transactions/tx-manager.js";
 
 /**
@@ -28,6 +28,8 @@ const ctx = {
   client,
   store,
   guardian: new GuardianClient(),
+  // v2 committee: the Risk Officer co-signs unless explicitly disabled (single-guardian vaults)
+  risk: process.env.RISK_URL === "off" ? null : new RiskClient(),
   tx: ops ? new TxManager(ops, store) : null,
   ops,
   vault,

@@ -31,6 +31,19 @@ export const countersignVaultAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_GUARDIANS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_HOPS",
     "inputs": [],
     "outputs": [
@@ -64,6 +77,19 @@ export const countersignVaultAbi = [
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "STOP_LOCKOUT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -116,6 +142,19 @@ export const countersignVaultAbi = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "VERSION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
       }
     ],
     "stateMutability": "view"
@@ -245,6 +284,37 @@ export const countersignVaultAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "breakerTripped",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "checkBreaker",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "nav_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "tripped",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -390,9 +460,9 @@ export const countersignVaultAbi = [
         ]
       },
       {
-        "name": "sig",
-        "type": "bytes",
-        "internalType": "bytes"
+        "name": "sigs",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
       }
     ],
     "outputs": [
@@ -419,6 +489,32 @@ export const countersignVaultAbi = [
   },
   {
     "type": "function",
+    "name": "guardians",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]",
+        "internalType": "address[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "highWaterMark",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "initialize",
     "inputs": [
       {
@@ -437,9 +533,14 @@ export const countersignVaultAbi = [
             "internalType": "address"
           },
           {
-            "name": "guardian",
-            "type": "address",
-            "internalType": "address"
+            "name": "guardians",
+            "type": "address[]",
+            "internalType": "address[]"
+          },
+          {
+            "name": "threshold",
+            "type": "uint8",
+            "internalType": "uint8"
           },
           {
             "name": "quote",
@@ -520,6 +621,26 @@ export const countersignVaultAbi = [
                 "name": "expiry",
                 "type": "uint64",
                 "internalType": "uint64"
+              },
+              {
+                "name": "minNetValueQuote",
+                "type": "uint128",
+                "internalType": "uint128"
+              },
+              {
+                "name": "stopLossBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "takeProfitBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "maxDrawdownBps",
+                "type": "uint16",
+                "internalType": "uint16"
               }
             ]
           }
@@ -533,6 +654,25 @@ export const countersignVaultAbi = [
     "type": "function",
     "name": "initialized",
     "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isGuardian",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -624,8 +764,41 @@ export const countersignVaultAbi = [
             "name": "expiry",
             "type": "uint64",
             "internalType": "uint64"
+          },
+          {
+            "name": "minNetValueQuote",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "stopLossBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "takeProfitBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "maxDrawdownBps",
+            "type": "uint16",
+            "internalType": "uint16"
           }
         ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nav",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "total",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -843,6 +1016,32 @@ export const countersignVaultAbi = [
   },
   {
     "type": "function",
+    "name": "reentryBlockedUntil",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "resetBreaker",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "router",
     "inputs": [],
     "outputs": [
@@ -869,12 +1068,17 @@ export const countersignVaultAbi = [
   },
   {
     "type": "function",
-    "name": "setGuardian",
+    "name": "setCommittee",
     "inputs": [
       {
-        "name": "g",
-        "type": "address",
-        "internalType": "address"
+        "name": "newGuardians",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "threshold_",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "outputs": [],
@@ -948,12 +1152,108 @@ export const countersignVaultAbi = [
             "name": "expiry",
             "type": "uint64",
             "internalType": "uint64"
+          },
+          {
+            "name": "minNetValueQuote",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "stopLossBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "takeProfitBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "maxDrawdownBps",
+            "type": "uint16",
+            "internalType": "uint16"
           }
         ]
       }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "stopOut",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "stopStatus",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "twapValue",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "cost",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "stopTriggered",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "takeProfitTriggered",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "threshold",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1023,6 +1323,26 @@ export const countersignVaultAbi = [
             "name": "expiry",
             "type": "uint64",
             "internalType": "uint64"
+          },
+          {
+            "name": "minNetValueQuote",
+            "type": "uint128",
+            "internalType": "uint128"
+          },
+          {
+            "name": "stopLossBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "takeProfitBps",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "maxDrawdownBps",
+            "type": "uint16",
+            "internalType": "uint16"
           }
         ]
       }
@@ -1161,6 +1481,57 @@ export const countersignVaultAbi = [
   },
   {
     "type": "event",
+    "name": "BreakerReset",
+    "inputs": [
+      {
+        "name": "nav",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BreakerTripped",
+    "inputs": [
+      {
+        "name": "nav",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "highWaterMark",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CommitteeUpdated",
+    "inputs": [
+      {
+        "name": "guardians",
+        "type": "address[]",
+        "indexed": false,
+        "internalType": "address[]"
+      },
+      {
+        "name": "threshold",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DecisionsAnchored",
     "inputs": [
       {
@@ -1192,13 +1563,13 @@ export const countersignVaultAbi = [
   },
   {
     "type": "event",
-    "name": "GuardianSet",
+    "name": "HighWaterMark",
     "inputs": [
       {
-        "name": "guardian",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        "name": "nav",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1220,16 +1591,16 @@ export const countersignVaultAbi = [
         "internalType": "address"
       },
       {
-        "name": "guardian",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
         "name": "quote",
         "type": "address",
         "indexed": false,
         "internalType": "address"
+      },
+      {
+        "name": "threshold",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
       }
     ],
     "anonymous": false
@@ -1312,6 +1683,61 @@ export const countersignVaultAbi = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "StopExecuted",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "kind",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "uint8"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "twapValue",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "costPortion",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "realizedPnl",
+        "type": "int256",
+        "indexed": false,
+        "internalType": "int256"
       }
     ],
     "anonymous": false
@@ -1546,6 +1972,38 @@ export const countersignVaultAbi = [
   },
   {
     "type": "error",
+    "name": "DrawdownBreaker",
+    "inputs": [
+      {
+        "name": "nav",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "floor",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ExpectedLoss",
+    "inputs": [
+      {
+        "name": "expectedNetValue",
+        "type": "int256",
+        "internalType": "int256"
+      },
+      {
+        "name": "minNetValue",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "ExposureExceeded",
     "inputs": [
       {
@@ -1629,6 +2087,22 @@ export const countersignVaultAbi = [
   },
   {
     "type": "error",
+    "name": "NotEnoughSignatures",
+    "inputs": [
+      {
+        "name": "valid",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "threshold",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "NotEnoughTracked",
     "inputs": [
       {
@@ -1672,6 +2146,33 @@ export const countersignVaultAbi = [
     "type": "error",
     "name": "Reentrancy",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ReentryLocked",
+    "inputs": [
+      {
+        "name": "until",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "StopNotTriggered",
+    "inputs": [
+      {
+        "name": "twapValue",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "costPortion",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

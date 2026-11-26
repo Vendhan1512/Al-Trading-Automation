@@ -123,6 +123,14 @@ export function validate(inp: ValidationInput): ValidationResult {
     add({ name: "available-cash", pass: cash >= amountIn, severity: "hard", value: fromRaw(cash, qd), limit: fromRaw(amountIn, qd) });
     const readyAt = v.lastEntryAt + m.cooldown;
     add({ name: "cooldown", pass: v.lastEntryAt === 0 || inp.nowSec >= readyAt, severity: "soft", value: inp.nowSec, limit: readyAt });
+    // v2: no re-entry right after a stop-loss; drawdown breaker (owner-reset only)
+    const lockedUntil = pos?.reentryBlockedUntil ?? 0;
+    add({ name: "reentry-lockout", pass: inp.nowSec >= lockedUntil, severity: "soft", value: inp.nowSec, limit: lockedUntil, note: "buys are refused for 1h after a stop-loss" });
+    if (m.maxDrawdownBps > 0) {
+      const floor = (v.highWaterMark * BigInt(10_000 - m.maxDrawdownBps)) / 10_000n;
+      const ok = !v.breakerTripped && (v.highWaterMark === 0n || v.nav === null || v.nav >= floor);
+      add({ name: "drawdown-breaker", pass: ok, severity: "hard", value: v.nav === null ? null : fromRaw(v.nav, qd), limit: fromRaw(floor, qd), note: v.breakerTripped ? "breaker tripped: only the owner can reset it" : "NAV vs high-water mark" });
+    }
   } else {
     add({ name: "tracked-inventory", pass: !!pos && amountIn <= pos.qty, severity: "hard", value: pos ? fromRaw(pos.qty, bd) : 0, limit: fromRaw(amountIn, bd) });
     if (p.tier !== "EXIT") add({ name: "tier-allowed", pass: p.tier !== "A" && (m.tiersMask & tierBit(p.tier)) !== 0, severity: "hard", value: p.tier });
@@ -173,7 +181,8 @@ export function validate(inp: ValidationInput): ValidationResult {
       // net value of the position marked at the reference, after a full round trip of costs
       expectedNet = outHuman * markRef - amountInUsdt - exitCostUsdt - gasUsdt;
     }
-    add({ name: "expected-net-value", pass: expectedNet > pol.minNetValueUsdt, severity: "soft", value: +expectedNet.toFixed(6), limit: pol.minNetValueUsdt, note: "after entry fee, impact, exit fee and gas both ways" });
+    const floorUsdt = Math.max(pol.minNetValueUsdt, fromRaw(m.minNetValueQuote ?? 0n, qd));
+    add({ name: "expected-net-value", pass: expectedNet > floorUsdt, severity: "soft", value: +expectedNet.toFixed(6), limit: floorUsdt, note: "after entry fee, impact, exit fee and gas both ways (the vault also refuses a non-positive signed expectation)" });
   } else {
     const costPortion = pos && pos.qty > 0n ? fromRaw((pos.cost * amountIn) / pos.qty, qd) : 0;
     expectedNet = fromRaw(minOut, qd) - costPortion - gasUsdt; // informational: exits are risk-reducing
