@@ -18,7 +18,8 @@
     "abi": "node scripts/gen-abi.mjs",
     "risk": "tsx src/guardian/risk-server.ts",
     "verify": "tsx src/cli/verify.ts",
-    "publish-site": "tsx src/cli/publish-site.ts"
+    "publish-site": "tsx src/cli/publish-site.ts",
+    "backtest": "tsx src/backtest/run.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

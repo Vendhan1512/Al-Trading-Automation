@@ -178,8 +178,13 @@ export function validate(inp: ValidationInput): ValidationResult {
       const valueAtSpot = outHuman * spot;
       expectedNet = valueAtSpot * (1 + s.probability * up - (1 - s.probability) * down) - amountInUsdt - exitCostUsdt - gasUsdt;
     } else {
-      // net value of the position marked at the reference, after a full round trip of costs
-      expectedNet = outHuman * markRef - amountInUsdt - exitCostUsdt - gasUsdt;
+      // Value the position at the SAME exit the strategy targets: only half the gap closes on the pool
+      // (backtest finding, research/backtest.md: valuing at full convergence approved trades whose
+      // own target could not pay two fees + gas). Then subtract the exit fee/impact and gas both ways.
+      const exitPrice = spot + (markRef - spot) * 0.5;
+      const exitValue = outHuman * exitPrice;
+      exitCostUsdt = exitValue * exitFrac + gasUsdt;
+      expectedNet = exitValue - amountInUsdt - exitCostUsdt - gasUsdt;
     }
     const floorUsdt = Math.max(pol.minNetValueUsdt, fromRaw(m.minNetValueQuote ?? 0n, qd));
     add({ name: "expected-net-value", pass: expectedNet > floorUsdt, severity: "soft", value: +expectedNet.toFixed(6), limit: floorUsdt, note: "after entry fee, impact, exit fee and gas both ways (the vault also refuses a non-positive signed expectation)" });

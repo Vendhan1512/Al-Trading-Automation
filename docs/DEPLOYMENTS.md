@@ -7,7 +7,31 @@
 | Agent (AI hot key; also deployed the ownerless implementation and factory) | `0x170912F2F8beb252902e9b07F63851B2e284bEA7` |
 | Guardian (countersigner) | `0xE278AC403F93b05cad73f6C3C4D0B9E5667fac5D` |
 
-## HSK testnet (chain 133), deployed 23 Nov 2026
+## HSK testnet (chain 133), v2 — committee + permissionless stops (26 Nov 2026)
+| Contract | Address |
+|---|---|
+| CountersignVault v2 implementation | [`0xC5364E26d793e9745F095018B7288b8ED3112D4B`](https://testnet-explorer.hskchain.net/address/0xC5364E26d793e9745F095018B7288b8ED3112D4B) |
+| VaultFactory v2 | [`0xFe19ba9E01aeE243869DfBEFA7B423B13F645779`](https://testnet-explorer.hskchain.net/address/0xFe19ba9E01aeE243869DfBEFA7B423B13F645779) |
+| 2-of-2 committee vault (E2E) | [`0xC425Bd94c290F5968CA2a2F10B8092c6152F03A1`](https://testnet-explorer.hskchain.net/address/0xC425Bd94c290F5968CA2a2F10B8092c6152F03A1) |
+
+| Deploy step | Transaction |
+|---|---|
+| CountersignVault | `0x2322b4c93322f8e3204a26a528bf5af48547b28fe0bd9feed85c718bb965c857` |
+| VaultFactory | `0x9f1244c498165136ef1aa50f0327d6d6e9f36b31dc3fafd22ce5fd462ebd0ee8` |
+
+End-to-end run (`script/E2ETestnet.s.sol`), committee = Execution Guardian `0xE278…ac5D` + Risk Officer `0x2697…6E29`, threshold 2. The agent's self-signed permit was refused (`InvalidPermit`) and the Guardian alone was refused (`NotEnoughSignatures(1, 2)`); both were simulated with no gas. The committee-signed trade executed:
+
+| Step | Transaction |
+|---|---|
+| createVault | `0x251b5e33f2c08203bc6be7b4a1d8ed7a0a315dea8cb0d86c6f86e4fb011c4354` |
+| deposit | `0x51976927f8a169fa789369a12201c05a75bab9939dd68ff91c1e726172338f1b` |
+| approve | `0x588be9b9539b927b21843f2ca335a4a218de53d105bc2b2ffa9c1a99c93b6c52` |
+| depositAsset | `0x802933b241ee92fb3a49aed10dbee6d676a292619851406ccad4a86fb92e1ce6` |
+| execute | `0x4cbbc0e4a64e95505e3fd92ba43a6f25ed84e04df47d432d95852bd5ea65c24f` |
+
+`pnpm verify trade <execute tx> --testnet` → **14/14 PASS**.
+
+## HSK testnet (chain 133), v1 — deployed 23 Nov 2026
 | Contract | Address | Verification |
 |---|---|---|
 | CountersignVault (implementation) | [`0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF`](https://testnet-explorer.hskchain.net/address/0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF) | Sourcify **exact_match** |

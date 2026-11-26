@@ -14,7 +14,9 @@ import type { PermitJson, Proposal } from "../src/guardian/types.js";
 import { NOW, cex, snap } from "./fixtures.js";
 
 const SPOT = 1700;
-const health = (refs = [cex("gate", 1729), cex("mexc", 1730), cex("coinbase", 1731)]) =>
+// ~350 bps cheap pool: under honest valuation (half the gap closes, two fees, gas both ways) a
+// 5 USDT entry is clearly positive. A 170 bps gap is NOT (see the backtest-finding test below).
+const health = (refs = [cex("gate", 1759), cex("mexc", 1760), cex("coinbase", 1761)]) =>
   evaluateMarket(snap({ references: refs }), ["WETH"], { now: NOW }).assets[0]!;
 
 /** 1 USDT -> WETH at spot after 0.3% fee, no impact */
@@ -53,6 +55,12 @@ describe("Execution Guardian — validation", () => {
     expect(r.economics.edgeBps!).toBeGreaterThan(30);
     expect(r.expectedNetValueUsdt).toBeGreaterThan(0);
     expect(r.plan.method).toBe("IMMEDIATE");
+  });
+  it("backtest finding: a 170 bps gap is refused because only half of it is expected to close", () => {
+    const r = validate(input({ health: health([cex("gate", 1729), cex("mexc", 1730), cex("coinbase", 1731)]) }));
+    expect(r.economics.edgeBps!).toBeGreaterThan(30); // the edge-or-revert check alone would pass...
+    expect(failed(r)).toEqual(["expected-net-value"]); // ...but the honest expectation is negative
+    expect(r.decision).toBe("WAIT");
   });
   it("Scenario 5 — over the per-trade cap is REJECTed", () => {
     const r = validate(input({}, { amountIn: "6000000" }));

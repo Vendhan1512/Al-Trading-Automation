@@ -193,7 +193,7 @@ Go live early. A dated history of real mainnet decisions is what won Nalvis and 
   - Every change is shown as a **diff card**. Tighter limits are applied by the agent via `tighten()`. Looser limits produce an owner transaction to sign in the wallet
 - **Deliverable:** a judge can type "trade only ETH, smaller, low risk, at most once every 10 minutes" and watch the on-chain mandate change
 
-### Phase 7: Simulation and evidence (Sun 29 – Mon 30 Nov)
+### Phase 7: Simulation and evidence ✅ DONE 26 Nov (30-day backtest, verifier 14/14, Merkle anchoring, arbitrage radar, public static dashboard)
 - [ ] Backtest: replay 30 days of Swap events and snapshots through the **same** Guardian and risk code, with fees, measured impact and gas. Write `research/backtest.md` with honest results
 - [ ] Paper trading: live data, virtual book, fills at quoted output minus modelled impact
 - [ ] Strategy comparison view (arbitrage vs spread vs mean reversion)

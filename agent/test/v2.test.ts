@@ -13,7 +13,7 @@ import { NOW, cex, snap } from "./fixtures.js";
 
 const SPOT = 1700;
 const out = (usdtRaw: bigint, impactBps = 0) => (usdtRaw * 10n ** 12n * 997n * BigInt(10_000 - impactBps)) / (BigInt(SPOT) * 1000n * 10_000n);
-const health = () => evaluateMarket(snap({ references: [cex("gate", 1729), cex("mexc", 1730)] }), ["WETH"], { now: NOW }).assets[0]!;
+const health = () => evaluateMarket(snap({ references: [cex("gate", 1759), cex("mexc", 1760)] }), ["WETH"], { now: NOW }).assets[0]!;
 const vault = () =>
   paperVaultState(MAINNET, 50, { maxTradeQuote: 5_000_000n, dailyVolumeQuote: 20_000_000n, maxExposureQuote: 10_000_000n, dailyLossQuote: 1_000_000n });
 
