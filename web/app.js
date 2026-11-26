@@ -1,13 +1,42 @@
 // Countersign dashboard — dependency-free. Everything rendered from the agent's read-only API.
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// Live mode: the agent serves /api/*. Static mode (GitHub Pages): the same data is read from
+// published JSON snapshots in ./data/ (written by `pnpm publish-site` and a scheduled Action).
+let STATIC = false;
+const snapshotPath = (p) => {
+  const u = new URL(p, "http://x");
+  const q = u.searchParams;
+  const m = {
+    "/api/config": "config", "/api/portfolio": "portfolio", "/api/market/prices": "prices", "/api/strategies/health": "health",
+    "/api/agent/decisions": "decisions", "/api/arbitrage": "arbitrage", "/api/transactions": "transactions", "/api/trades": "trades", "/api/predictions": "predictions",
+  }[u.pathname];
+  if (m) return `data/${m}.json`;
+  if (u.pathname === "/api/market/history") return `data/history-${q.get("asset")}.json`;
+  if (u.pathname === "/api/agent/decision") return `data/decision-${q.get("seq")}.json`;
+  return null;
+};
 const api = async (p) => {
-  const r = await fetch(p, { cache: "no-store" });
-  if (!r.ok) throw new Error(`${p}: HTTP ${r.status}`);
+  if (!STATIC) {
+    try {
+      const r = await fetch(p.slice(1), { cache: "no-store" });
+      if (r.ok && (r.headers.get("content-type") || "").includes("json")) return r.json();
+      if (p === "/api/config") STATIC = true;
+      else if (r.status !== 404) throw new Error(`${p}: HTTP ${r.status}`);
+    } catch (e) {
+      if (p !== "/api/config") throw e;
+      STATIC = true;
+    }
+  }
+  const sp = snapshotPath(p);
+  if (!sp) throw new Error(`${p}: not available in the static snapshot`);
+  const r = await fetch(sp, { cache: "no-store" });
+  if (!r.ok) throw new Error(`${sp}: HTTP ${r.status}`);
   return r.json();
 };
 const post = async (p, body) => {
-  const r = await fetch(p, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (STATIC) throw new Error("Mission Control talks to the running agent. This public page is a published snapshot — run the agent locally (see README) to chat, ask what-if questions and change the mandate.");
+  const r = await fetch(p.slice(1), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
   return j;
@@ -87,7 +116,9 @@ const kpi = (l, n, s = "") => `<div class="kpi"><div class="l">${esc(l)}</div><d
 async function renderOverview() {
   const [pf, px, hl, dec] = await Promise.all([api("/api/portfolio").catch(() => null), api("/api/market/prices").catch(() => null), api("/api/strategies/health"), api("/api/agent/decisions?limit=6")]);
   $("#kpis").innerHTML = [
-    kpi("Vault value", pf ? `${num(pf.totalValueUsdt, 2)} <span class="small muted">USDT</span>` : "—", pf ? `${num(pf.usdt, 2)} USDT cash · ${pf.paused ? "PAUSED" : "active"}` : ""),
+    pf?.mode === "paper"
+      ? kpi("Vault value", `${num(pf.totalValueUsdt, 2)} <span class="small muted">USDT · PAPER</span>`, "simulated vault — the v2 mainnet vault is not live yet")
+      : kpi("Vault value", pf ? `${num(pf.totalValueUsdt, 2)} <span class="small muted">USDT</span>` : "—", pf ? `${num(pf.usdt, 2)} USDT cash · ${pf.paused ? "PAUSED" : "active"}` : ""),
     kpi("Open positions", pf ? pf.positions.length : "—", pf?.positions.map((p) => p.asset).join(", ") || "none"),
     kpi("Realized today", pf ? `${num(pf.today.realizedPnlUsdt, 4)}` : "—", pf ? `${num(pf.today.volumeUsdt, 2)} USDT volume today` : ""),
     kpi("Net P&L (after gas)", num(hl.netPnlUsdt, 4), `${hl.trades} fills · gas ${num(hl.gasUsdt, 4)} USDT`),
@@ -399,7 +430,7 @@ function initBreakIt() {
     $("#bkRun").disabled = true;
     $("#bkOut").innerHTML = '<span class="muted">running attacks against the live contract…</span>';
     try {
-      const { runAttacks } = await import("/breakit.js");
+      const { runAttacks } = await import("./breakit.js");
       const r = await runAttacks({ rpc: RPCS[chainId], chainId, vault });
       const blocked = r.results.filter((x) => x.blocked).length;
       const ex2 = (k, v) => `<a class="mono" target="_blank" rel="noopener" href="${esc(EXPLORERS[chainId])}/${k}/${esc(v)}">${esc(short(v))}</a>`;
@@ -440,7 +471,8 @@ async function refresh() {
     const v = $("#rVault");
     v.textContent = short(CFG.vault);
     if (CFG.vault) v.href = ex("address", CFG.vault);
-    $("#copilotMode").textContent = CFG.copilot === "llm" ? "Claude with tools" : "rules mode (add ANTHROPIC_API_KEY for Claude)";
+    $("#copilotMode").textContent = STATIC ? `public snapshot · published ${CFG.publishedAt ? ago(CFG.publishedAt) : ""}` : CFG.copilot === "llm" ? "Claude with tools" : "rules mode (add ANTHROPIC_API_KEY for Claude)";
+    if (STATIC) $("#modeBadge").textContent = `● PUBLIC SNAPSHOT · ${CFG.mode === "live" ? "LIVE agent" : "SHADOW agent"}`;
   }
   renderOwner();
   initBreakIt();

@@ -1,0 +1,51 @@
+name: public-dashboard
+# Publishes web/ to GitHub Pages. Every 30 minutes it refreshes the live market and arbitrage
+# snapshot from HSK mainnet. It holds no keys and sends no transactions — the agent's journal
+# files in web/data/ are published by the running agent (`pnpm publish-site`).
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Refresh market + arbitrage snapshot (read-only)
+        working-directory: agent
+        env:
+          VAULT: ${{ vars.VAULT || '0x76fB3ae6c48964171a297C88a16513284CfB9eE0' }}
+          AGENT: "0x170912F2F8beb252902e9b07F63851B2e284bEA7"
+          GUARDIAN: "0xE278AC403F93b05cad73f6C3C4D0B9E5667fac5D"
+          RISK_OFFICER: "0x2697e6bbac5959F66bAf916Ac024aF045ec16E29"
+          OWNER: "0x5bb83E60a7a05A0e1b077B66412a26306e334208"
+          AGENT_MODE: ${{ vars.AGENT_MODE || 'shadow' }}
+        run: pnpm exec tsx src/cli/publish-site.ts --market-only
+        continue-on-error: true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
