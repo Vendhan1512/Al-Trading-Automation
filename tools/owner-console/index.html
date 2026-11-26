@@ -56,7 +56,17 @@
     <h2><span class="step">2</span>Your trading mandate (the rules the AI must follow)</h2>
     <div class="grid">
       <label>Agent address (AI)<input id="agent" class="mono" /></label>
-      <label>Guardian address (checker)<input id="guardian" class="mono" /></label>
+      <label>Execution Guardian (committee #1)<input id="guardian" class="mono" /></label>
+      <label>Risk Officer (committee #2)<input id="risk" class="mono" /></label>
+      <label>Signatures required
+        <select id="threshold">
+          <option value="2" selected>2 of 2 — both must approve every trade</option>
+          <option value="1">1 of 2 — either may approve</option>
+        </select>
+      </label>
+      <label>Stop-loss, anyone can trigger (%)<input id="stopLoss" type="number" step="any" value="3" /></label>
+      <label>Take-profit, anyone can trigger (%, 0 = off)<input id="takeProfit" type="number" step="any" value="0" /></label>
+      <label>Drawdown breaker on vault value (%)<input id="maxDd" type="number" step="any" value="10" /></label>
       <label>Max per trade (USDT)<input id="maxTrade" type="number" step="any" value="5" /></label>
       <label>Max daily volume (USDT)<input id="dailyVol" type="number" step="any" value="20" /></label>
       <label>Stop new trades after daily loss of (USDT)<input id="dailyLoss" type="number" step="any" value="1" /></label>
@@ -114,14 +124,15 @@ const NETS = {
 };
 const DEFAULT_AGENT = "0x170912F2F8beb252902e9b07F63851B2e284bEA7";
 const DEFAULT_GUARDIAN = "0xE278AC403F93b05cad73f6C3C4D0B9E5667fac5D";
+const DEFAULT_RISK = "0x2697e6bbac5959F66bAf916Ac024aF045ec16E29";
 
 const FACTORY_ABI = [
-  "function createVault(address agent,address guardian,address quote,address[] assets,uint24[] assetFees,(uint128 maxTradeQuote,uint128 dailyVolumeQuote,uint128 dailyLossQuote,uint128 maxExposureQuote,uint128 minArbProfitQuote,uint32 cooldown,uint32 twapWindow,uint16 maxSlippageBps,uint16 minEdgeBps,uint8 tiersMask,uint8 assetsMask,uint64 expiry) mandate) returns (address)",
+  "function createVault(address agent,address[] guardians,uint8 threshold,address quote,address[] assets,uint24[] assetFees,(uint128 maxTradeQuote,uint128 dailyVolumeQuote,uint128 dailyLossQuote,uint128 maxExposureQuote,uint128 minArbProfitQuote,uint32 cooldown,uint32 twapWindow,uint16 maxSlippageBps,uint16 minEdgeBps,uint8 tiersMask,uint8 assetsMask,uint64 expiry,uint128 minNetValueQuote,uint16 stopLossBps,uint16 takeProfitBps,uint16 maxDrawdownBps) mandate) returns (address)",
   "function vaultsOf(address owner) view returns (address[])",
   "event VaultCreated(address indexed owner, address indexed vault, address agent, address guardian)",
 ];
 const VAULT_ABI = [
-  "function owner() view returns (address)", "function agent() view returns (address)", "function guardian() view returns (address)",
+  "function owner() view returns (address)", "function agent() view returns (address)", "function guardian() view returns (address)", "function guardians() view returns (address[])", "function threshold() view returns (uint8)",
   "function paused() view returns (bool)", "function policyHash() view returns (bytes32)", "function quote() view returns (address)",
   "function mandate() view returns ((uint128 maxTradeQuote,uint128 dailyVolumeQuote,uint128 dailyLossQuote,uint128 maxExposureQuote,uint128 minArbProfitQuote,uint32 cooldown,uint32 twapWindow,uint16 maxSlippageBps,uint16 minEdgeBps,uint8 tiersMask,uint8 assetsMask,uint64 expiry))",
   "function pause()", "function unpause()", "function setAgent(address)", "function withdraw(address token,uint256 amount)",
@@ -134,6 +145,7 @@ const log = (msg, cls = "") => { const d = document.createElement("div"); d.clas
 let provider, signer, account, chainId, deploy, quoteDecimals = 6;
 $("agent").value = DEFAULT_AGENT;
 $("guardian").value = DEFAULT_GUARDIAN;
+$("risk").value = DEFAULT_RISK;
 
 async function loadDeployment(id) {
   const r = await fetch(`/contracts/deployments/${id}.json`, { cache: "no-store" });
@@ -188,12 +200,18 @@ async function createVault() {
     maxSlippageBps: Number($("slip").value), minEdgeBps: Number($("edge").value),
     tiersMask: Number($("tiers").value), assetsMask: (1 << assets.length) - 1,
     expiry: BigInt(Math.floor(Date.now() / 1000) + Number($("days").value) * 86400),
+    minNetValueQuote: 0n,
+    stopLossBps: Math.round(Number($("stopLoss").value) * 100),
+    takeProfitBps: Math.round(Number($("takeProfit").value) * 100),
+    maxDrawdownBps: Math.round(Number($("maxDd").value) * 100),
   };
   const f = new Contract(deploy.vaultFactory, FACTORY_ABI, signer);
   $("create").disabled = true;
   try {
     log("Please confirm the transaction in your wallet…");
-    const tx = await f.createVault($("agent").value.trim(), $("guardian").value.trim(), deploy.quote, assets, assets.map(() => 3000), mandate);
+    const committee = [$("guardian").value.trim(), $("risk").value.trim()].filter(Boolean);
+    const threshold = Math.min(Number($("threshold").value), committee.length);
+    const tx = await f.createVault($("agent").value.trim(), committee, threshold, deploy.quote, assets, assets.map(() => 3000), mandate);
     log(`Submitted: ${tx.hash}`);
     const rc = await tx.wait();
     const ev = rc.logs.map((l) => { try { return f.interface.parseLog(l); } catch { return null; } }).find((x) => x?.name === "VaultCreated");

@@ -29,6 +29,7 @@ const link = (kind, v, label) => (v ? `<a class="mono" target="_blank" rel="noop
 const STATUS = {
   VALID: ["good", "✓"], APPROVE: ["good", "✓"], EXECUTED: ["good", "✓"], CONFIRMED: ["good", "✓"], HIT: ["good", "✓"],
   WARNING: ["warning", "!"], WAIT: ["warning", "⏸"], SKIP: ["neutral", "–"], PENDING: ["warning", "…"], SUBMITTED: ["warning", "…"], ADVISORY: ["warning", "!"], EXPIRED: ["neutral", "⌛"],
+  BLOCKED: ["good", "🛡"], ALLOWED: ["critical", "✕"],
   REJECT: ["critical", "✕"], REVERTED: ["critical", "✕"], FAILED: ["critical", "✕"], DROPPED: ["serious", "↓"], REPLACED: ["serious", "↺"], CANCELLED: ["serious", "⊘"], INVALIDATED: ["critical", "✕"], PAUSED: ["critical", "⏸"], TIGHTENED: ["warning", "↧"],
 };
 const badge = (s) => {
@@ -372,6 +373,40 @@ $("#chips").onclick = (e) => {
   if (c) send(c.textContent);
 };
 
+// ---------------------------------------------------------------- try to break it
+const RPCS = { 177: "https://mainnet.hsk.xyz", 133: "https://testnet.hsk.xyz" };
+const EXPLORERS = { 177: "https://hsk.blockscout.com", 133: "https://testnet-explorer.hskchain.net" };
+const DEMO_TESTNET_VAULT = "0xC425Bd94c290F5968CA2a2F10B8092c6152F03A1"; // v2, 2-of-2 committee
+function initBreakIt() {
+  const qs = new URLSearchParams(location.search);
+  const net = qs.get("net") ?? (CFG?.v2Vault ? String(CFG.chainId) : "133");
+  $("#bkNet").value = net;
+  $("#bkVault").value = qs.get("vault") ?? (net === "133" ? DEMO_TESTNET_VAULT : (CFG?.v2Vault ?? ""));
+  $("#bkNet").onchange = () => { if ($("#bkNet").value === "133" && !$("#bkVault").value) $("#bkVault").value = DEMO_TESTNET_VAULT; };
+  $("#bkRun").onclick = async () => {
+    const chainId = Number($("#bkNet").value);
+    const vault = $("#bkVault").value.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(vault)) return ($("#bkOut").textContent = "Enter a vault address.");
+    $("#bkRun").disabled = true;
+    $("#bkOut").innerHTML = '<span class="muted">running attacks against the live contract…</span>';
+    try {
+      const { runAttacks } = await import("/breakit.js");
+      const r = await runAttacks({ rpc: RPCS[chainId], chainId, vault });
+      const blocked = r.results.filter((x) => x.blocked).length;
+      const ex2 = (k, v) => `<a class="mono" target="_blank" rel="noopener" href="${esc(EXPLORERS[chainId])}/${k}/${esc(v)}">${esc(short(v))}</a>`;
+      $("#bkOut").innerHTML = `<div style="margin-bottom:8px"><b>${blocked} of ${r.results.length} attacks blocked</b> by vault ${ex2("address", vault)} · committee ${r.threshold}-of-${r.guardians.length} · agent ${ex2("address", r.agent)}</div>
+        <table class="t"><thead><tr><th>Attack</th><th>As</th><th>Vault said</th><th>Result</th></tr></thead><tbody>${r.results
+          .map((x) => `<tr><td>${esc(x.title)}</td><td class="muted">${esc(x.who)}</td><td class="mono">${esc(x.name ?? "—")}${x.args?.length ? `(${esc(x.args.join(", "))})` : ""}</td><td>${x.blocked ? badge("BLOCKED") : badge("ALLOWED")}</td></tr>`)
+          .join("")}</tbody></table>`;
+    } catch (e) {
+      $("#bkOut").textContent = `Could not run: ${e.message}`;
+    } finally {
+      $("#bkRun").disabled = false;
+    }
+  };
+  if (qs.get("run") === "1") $("#bkRun").click();
+}
+
 // ---------------------------------------------------------------- boot
 async function refresh() {
   try {
@@ -399,8 +434,9 @@ async function refresh() {
     $("#copilotMode").textContent = CFG.copilot === "llm" ? "Claude with tools" : "rules mode (add ANTHROPIC_API_KEY for Claude)";
   }
   renderOwner();
+  initBreakIt();
   const fromHash = location.hash.slice(1);
-  if (["overview", "feed", "copilot", "evidence", "health"].includes(fromHash)) show(fromHash);
+  if (["overview", "feed", "copilot", "breakit", "evidence", "health"].includes(fromHash)) show(fromHash);
   addMsg("bot", "I'm Mission Control. Ask how the agent is doing, why it's waiting, what-if questions — or tell me how to trade: size, frequency, risk appetite, target assets. I only propose; the owner confirms.");
   await refresh();
   const ask = new URLSearchParams(location.search).get("ask");
