@@ -56,7 +56,18 @@ These are real transactions. A throwaway *test* owner `0xcD0181a00883ad99f1ddb6B
 
 Testnet pool prices are not real prices. This run proves the mechanics, not profitability.
 
-## HSK mainnet (chain 177), deployed 23 Nov 2026 ✅
+## HSK mainnet (chain 177), v2 — deployed 26 Nov 2026 ✅
+| Contract | Address | Verification |
+|---|---|---|
+| CountersignVault v2 implementation | [`0x0728B021D518a916edC1dc7689d6fBD23d601098`](https://hsk.blockscout.com/address/0x0728B021D518a916edC1dc7689d6fBD23d601098) | Sourcify **exact_match** · Blockscout **full match** |
+| VaultFactory v2 | [`0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4`](https://hsk.blockscout.com/address/0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4) | Sourcify **exact_match** · Blockscout **full match** |
+
+| Step | Transaction | Block | Gas |
+|---|---|---|---|
+| Deploy v2 implementation | [`0x49d207b0…bcf3c`](https://hsk.blockscout.com/tx/0x49d207b08df8e12d33df115621b102c43e78c695a6288bf393556a76172fdc5c) | 30,684,094 | 5,003,266 |
+| Deploy v2 factory | [`0x119e1a63…cf3c`](https://hsk.blockscout.com/tx/0x119e1a6366a7cb58dd3e2d3ab46a68c7c0aa7f166eec118f865c23030f9bcf3c) | 30,684,096 | 692,460 |
+
+## HSK mainnet (chain 177), v1 — deployed 23 Nov 2026 (superseded, kept for the record)
 | Contract | Address | Verification |
 |---|---|---|
 | CountersignVault (implementation) | [`0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF`](https://hsk.blockscout.com/address/0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF) | Sourcify **exact_match** · Blockscout **full match** |

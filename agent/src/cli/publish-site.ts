@@ -66,7 +66,7 @@ json("config", {
   guardian: process.env.GUARDIAN ?? null,
   riskOfficer: process.env.RISK_OFFICER ?? null,
   owner: process.env.OWNER ?? null,
-  contracts: { vaultImplementation: process.env.VAULT_IMPLEMENTATION ?? null, vaultFactory: MAINNET.vaultFactory, router: MAINNET.router },
+  contracts: { vaultImplementation: process.env.VAULT_IMPLEMENTATION ?? "0x0728B021D518a916edC1dc7689d6fBD23d601098", vaultFactory: MAINNET.vaultFactory, router: MAINNET.router },
   mode: process.env.AGENT_MODE ?? "shadow",
   copilot: "snapshot",
   publishedAt: Date.now(),

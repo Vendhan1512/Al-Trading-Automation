@@ -172,7 +172,7 @@ routes["/api/config"] = (_q, res) =>
     agent: process.env.AGENT ?? null,
     guardian: process.env.GUARDIAN ?? null,
     owner: process.env.OWNER ?? null,
-    contracts: { vaultImplementation: "0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF", vaultFactory: chain?.net.vaultFactory ?? null, router: chain?.net.router ?? null },
+    contracts: { vaultImplementation: "0x0728B021D518a916edC1dc7689d6fBD23d601098", vaultFactory: chain?.net.vaultFactory ?? null, router: chain?.net.router ?? null },
     mode: process.env.AGENT_MODE ?? "shadow",
     copilot: process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN ? "llm" : "rules",
   });

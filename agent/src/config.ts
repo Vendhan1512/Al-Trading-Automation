@@ -49,7 +49,7 @@ export const MAINNET: NetworkConfig = {
   quoterV2: "0x1095A23A4812185344D9abd5143191D8a3A7E36f",
   router: "0x2c16f75b95Cf1390c328aB70e2CEE7f4b80bD8F3",
   v3Factory: "0x972cA9D1662F5e029cD18327D29026532E84c742",
-  vaultFactory: "0x28ae19424647A051b95944DB26ffC0102085fBfE",
+  vaultFactory: "0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4", // v2 (committee + permissionless stops); v1 factory 0x28ae…fBfE
   apro: { address: "0x86CE42c1b714149Dc3A7b17169EF67b5F78A224b", decimals: 8, heartbeatSec: 25 * 3600 },
   quote: USDT,
   pools: [
