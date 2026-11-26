@@ -37,6 +37,7 @@ export interface ChainOps {
   /** v2 keeper actions — permissionless on the vault; the agent key only pays the gas. */
   stopOut(vault: Address, asset: Address, amountIn: bigint): Promise<Hex>;
   checkBreaker(vault: Address): Promise<Hex>;
+  anchorDecisions(vault: Address, root: Hex, fromSeq: bigint, toSeq: bigint): Promise<Hex>;
 }
 
 export type SubmitOutcome =
@@ -273,6 +274,8 @@ export function viemChainOps(client: PublicClient, net: NetworkConfig, agentPk: 
       wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "execute", args: [path, toMessage(permit), sigs], nonce, gasPrice, gas: 600_000n, type: "legacy" }),
     stopOut: (vault, asset, amountIn) =>
       wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "stopOut", args: [asset, amountIn, 0n], gas: 600_000n, type: "legacy" }),
+    anchorDecisions: (vault, root, fromSeq, toSeq) =>
+      wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "anchorDecisions", args: [root, fromSeq, toSeq], gas: 200_000n, type: "legacy" }),
     checkBreaker: (vault) => wallet.writeContract({ address: vault, abi: countersignVaultAbi, functionName: "checkBreaker", gas: 300_000n, type: "legacy" }),
     sendCancel: (nonce, gasPrice) => wallet.sendTransaction({ to: account.address, value: 0n, nonce, gasPrice, gas: 21_000n, type: "legacy" }),
     nonce: (tag) => client.getTransactionCount({ address: account.address, blockTag: tag }),

@@ -12,6 +12,7 @@ import { circuitBreaker, computeMetrics } from "../modules/strategy-health/healt
 import type { GuardianClient, RiskClient } from "../modules/execution/guardian-client.js";
 import type { CosignResponse } from "../guardian/risk-officer.js";
 import { countersignVaultAbi } from "../abi/countersignVault.js";
+import { maybeAnchor } from "../modules/evidence/anchor.js";
 import type { ChainOps, TxManager } from "../modules/transactions/tx-manager.js";
 import type { GuardianResponse, Proposal } from "../guardian/types.js";
 import type { Candidate } from "../modules/strategies/types.js";
@@ -284,6 +285,16 @@ export async function runPipeline(ctx: PipelineCtx, health: MarketHealth): Promi
       }
     } catch (e) {
       journal("breaker", null, "FAILED", `circuit breaker action ${a.kind} failed: ${(e as Error).message.split("\n")[0]}`, { action: a });
+    }
+  }
+
+  // evidence: commit every journaled decision (refusals included) as one Merkle root, periodically
+  if (ctx.mode === "live" && ctx.ops && ctx.vault) {
+    try {
+      const a = await maybeAnchor(ctx.client, ctx.ops, ctx.store, ctx.vault);
+      if (a.anchored) lines.push(`anchored decisions ${a.from}–${a.to} on-chain (root ${a.root.slice(0, 10)}…, tx ${a.tx})`);
+    } catch (e) {
+      lines.push(`anchoring failed: ${String((e as Error).message).split(/\r?\n/)[0]}`);
     }
   }
 

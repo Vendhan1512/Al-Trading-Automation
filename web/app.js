@@ -123,6 +123,15 @@ async function renderOverview() {
     $("#mandateExp").textContent = `expires ${new Date(m.expiry * 1000).toLocaleString()}`;
   }
   $("#latestDecisions").innerHTML = decisionRows(dec.decisions);
+  api("/api/arbitrage").then(renderRadar).catch(() => ($("#radar").innerHTML = '<div class="empty">radar unavailable</div>'));
+}
+
+function renderRadar(r) {
+  $("#radarTime").textContent = `gas ≈ ${num(r.gasPerSwapUsdt, 4)} USDT per swap · ${ago(r.at)}`;
+  $("#radar").innerHTML = `<table class="t"><thead><tr><th>Route</th><th class="r">Price gap</th><th class="r">Best size</th><th class="r">Before gas</th><th class="r">After gas</th><th>Verdict</th></tr></thead><tbody>${r.routes
+    .map((x) => `<tr><td>${esc(x.name)}</td><td class="r">${bps(x.midGapBps)}</td><td class="r">${x.best ? num(x.best.sizeUsdt, 1) : "—"}</td><td class="r">${x.best ? num(x.best.grossProfitUsdt, 4) : "—"}</td><td class="r">${x.best ? num(x.best.netUsdt, 4) : "—"}</td><td>${x.best && x.best.netUsdt > 0 ? badge("VALID") : badge("WAIT")}</td></tr>`)
+    .join("")}</tbody></table>
+    <div class="muted small" style="margin-top:6px">${esc(r.summary)} Venue depth: ${r.venues.map((v) => `${esc(v.name)} ${Math.round(v.depthUsdt).toLocaleString()}`).join(" · ")}.</div>`;
 }
 
 // ---------------------------------------------------------------- feed

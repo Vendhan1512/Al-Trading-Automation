@@ -7,6 +7,7 @@ import type { NetworkConfig } from "../config.js";
 import { paperVaultState, readVaultState, usdt } from "../modules/vault/state.js";
 import { evaluatePositions } from "../modules/positions/positions.js";
 import { computeMetrics } from "../modules/strategy-health/health.js";
+import { scanRadar, type RadarReport } from "../modules/arbitrage/radar.js";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { chat, proposeMandateChange, whatIf, type CopilotCtx } from "../copilot/copilot.js";
@@ -153,6 +154,16 @@ const routes: Record<string, (req: IncomingMessage, res: ServerResponse, url: UR
   },
 };
 
+let radarCache: { at: number; report: RadarReport } | null = null;
+routes["/api/arbitrage"] = async (_q, res) => {
+  if (!chain) return send(res, 503, { error: "no chain context" });
+  if (!radarCache || Date.now() - radarCache.at > 60_000) {
+    const h = store.latest()?.health;
+    const ref = (a: string, fallback: number) => h?.assets.find((x) => x.asset === a)?.reference ?? fallback;
+    radarCache = { at: Date.now(), report: await scanRadar(chain.client, chain.net, ref("WHSK", 0.08), ref("WETH", 1700)) };
+  }
+  send(res, 200, radarCache.report);
+};
 routes["/api/config"] = (_q, res) =>
   send(res, 200, {
     chainId: chain?.net.chainId ?? 177,

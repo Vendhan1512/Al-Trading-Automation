@@ -61,6 +61,7 @@ class FakeChain implements ChainOps {
   async pause() { return tid(0x9a05e); }
   async stopOut() { return tid(0x5709); }
   async checkBreaker() { return tid(0xb4ea); }
+  async anchorDecisions() { return tid(0xa4c0); }
   async tighten() { return tid(0x7167); }
   mine(hash: Hex, tradeId: Hex, status: "success" | "reverted" = "success") {
     this.receipts.set(hash, { status, blockNumber: 100n, gasUsed: 250_000n, effectiveGasPrice: 500_000_000_000n, logs: status === "success" ? [fillLog(tradeId, 5_000_000n, 82_000n, 0n)] : [] });

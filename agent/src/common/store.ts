@@ -150,6 +150,19 @@ export class Store {
       CREATE TRIGGER IF NOT EXISTS trades_append_only BEFORE UPDATE ON trades
         BEGIN SELECT RAISE(ABORT, 'trades is append-only'); END;
 
+      -- Merkle anchors of decision ranges committed on-chain (vault.anchorDecisions)
+      CREATE TABLE IF NOT EXISTS anchors (
+        idx INTEGER PRIMARY KEY,             -- the vault's anchor index
+        local_from INTEGER NOT NULL,
+        local_to INTEGER NOT NULL,
+        onchain_from INTEGER NOT NULL,
+        root TEXT NOT NULL,
+        tx TEXT NOT NULL,
+        at INTEGER NOT NULL
+      );
+      CREATE TRIGGER IF NOT EXISTS anchors_append_only BEFORE UPDATE ON anchors
+        BEGIN SELECT RAISE(ABORT, 'anchors is append-only'); END;
+
       -- Sworn predictions and their graded outcomes
       CREATE TABLE IF NOT EXISTS predictions (
         hash TEXT PRIMARY KEY,
@@ -251,6 +264,26 @@ export class Store {
       .prepare("INSERT INTO decisions (at, kind, asset, outcome, summary, payload, hash) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(d.at, d.kind, d.asset, d.outcome, d.summary, JSON.stringify(d.payload, (_k, v) => (typeof v === "bigint" ? v.toString() : v)), d.hash);
     return Number(r.lastInsertRowid);
+  }
+
+  decisionHashesFrom(fromSeq: number): { seq: number; hash: string }[] {
+    return this.db.prepare("SELECT seq, hash FROM decisions WHERE seq >= ? ORDER BY seq").all(fromSeq) as never;
+  }
+
+  decisionRow(seq: number): { seq: number; at: number; kind: string; summary: string; payload: string; hash: string } | null {
+    return (this.db.prepare("SELECT seq, at, kind, summary, payload, hash FROM decisions WHERE seq = ?").get(seq) as never) ?? null;
+  }
+
+  lastAnchor(): { idx: number; local_from: number; local_to: number; onchain_from: number; root: string; tx: string } | null {
+    return (this.db.prepare("SELECT * FROM anchors ORDER BY idx DESC LIMIT 1").get() as never) ?? null;
+  }
+
+  anchorFor(seq: number): { idx: number; local_from: number; local_to: number; onchain_from: number; root: string; tx: string } | null {
+    return (this.db.prepare("SELECT * FROM anchors WHERE local_from <= ? AND local_to >= ?").get(seq, seq) as never) ?? null;
+  }
+
+  recordAnchor(a: { idx: number; localFrom: number; localTo: number; onchainFrom: number; root: string; tx: string }) {
+    this.db.prepare("INSERT INTO anchors (idx, local_from, local_to, onchain_from, root, tx, at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(a.idx, a.localFrom, a.localTo, a.onchainFrom, a.root, a.tx, Date.now());
   }
 
   recentDecisions(limit = 50): { seq: number; at: number; kind: string; asset: string | null; outcome: string; summary: string; hash: string }[] {
