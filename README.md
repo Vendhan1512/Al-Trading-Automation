@@ -1,77 +1,183 @@
-# Countersign — the AI trader that can't trade alone
+<div align="center">
 
-**HSK Chain Horizon Hackathon (Seoul) · Track 1: AI Agent Trading · HashKey Chain + HSKSwap**
+# Countersign
 
-An autonomous AI trading agent for HSKSwap in which **no trade can move funds unless an independent committee countersigns it, and the vault on HSK Chain checks every signature.** A stolen agent key, a prompt-injected model or a buggy strategy is not enough to move a single token, and the stop-loss works even when the agent and the committee are offline.
+### The AI trader that can't trade alone.
+
+**An autonomous AI trading agent for HSKSwap whose every trade needs a second and third signature, from an independent committee, checked by the vault on HSK Chain.**
+
+[![HSK Chain mainnet](https://img.shields.io/badge/HSK%20Chain-mainnet%20live-3dd6a3)](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030)
+[![verify trade](https://img.shields.io/badge/verify%20trade-14%2F14-3dd6a3)](#verify-it-yourself-in-3-minutes)
+[![attacks](https://img.shields.io/badge/mainnet%20attacks%20blocked-15%2F15-3dd6a3)](#verify-it-yourself-in-3-minutes)
+[![tests](https://img.shields.io/badge/tests-217%20passing-6cb4ff)](#tested)
+[![contracts](https://img.shields.io/badge/contracts-Sourcify%20exact%20%2B%20Blockscout-6cb4ff)](#deployments)
+
+**[Live dashboard](https://vendhan1512.github.io/Al-Trading-Automation/)** · **[Try to break it](https://vendhan1512.github.io/Al-Trading-Automation/?run=1#break)** · **[The mainnet trade](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584)** · **[Deployments](docs/DEPLOYMENTS.md)**
+
+*HSK Chain Horizon Hackathon (Seoul) · Track 1: AI Agent Trading*
+
+</div>
+
+---
+
+## The problem nobody else solves
+
+Putting trading rules in a vault is the right first step: caps, slippage floors, stop-losses the model cannot argue with. But in a guardrailed vault **one key still decides every trade.** If that key leaks, or the model is prompt-injected, or the strategy has a bug, the attacker gets the agent's whole allowance: every trade the rules permit, as fast as the cooldown allows, into whatever the market is doing.
+
+Banks solved this decades ago with the **two-person rule**: the trader proposes, risk countersigns, and the books refuse anything unsigned.
+
+**Countersign puts the two-person rule on-chain.**
 
 ```
-AI proposes ─► Execution Guardian prices it ─► Risk Officer re-checks it ─► Vault enforces ─► HSKSwap
-   (agent key)        (key #2, signs)              (key #3, co-signs or vetoes)   (k-of-n + mandate)
-                                         Owner controls everything (hardware wallet)
+   AI agent ──proposes──► Execution Guardian ──signs──► Risk Officer ──co-signs or vetoes──► CountersignVault ──► HSKSwap
+  (key #1, can           (key #2, re-prices           (key #3, stricter limits,          (checks k-of-n EIP-712
+   only submit)           at the live quote)            optional Claude veto)               signatures + the mandate)
+
+                            Owner (hardware wallet): sets the mandate, picks the committee, pauses, withdraws.
 ```
 
-| | |
-|---|---|
-| **Two-person rule, on-chain** | Every trade needs *k* of *n* EIP-712 countersignatures from distinct committee keys, checked by the vault. Signatures bind the exact route, size, output floor, edge claim, expected value, prediction and policy. Change the rules or the committee and every outstanding permit dies |
-| **Stop-loss that needs nobody** | `stopOut()` is **permissionless**. It triggers on the pool's 30-minute TWAP vs average cost (a one-block wick cannot fire it) and exits with a TWAP-anchored floor (it cannot be sandwiched). Proven on a mainnet fork: a 1.5M WHSK single-block dump did **not** trigger it; the same crash held for 30 minutes did, fired by a stranger |
-| **Refuses to lose money on gas** | Entries must carry a committee-signed **positive expected value after fees, impact, exit and gas both ways**. At HSK's 500 gwei a swap costs ~$0.012, so trades under ~3 USDT are refused, by design |
-| **Drawdown breaker + re-entry lockout** | NAV valued at TWAP; entries refused below the high-water-mark floor even before anyone trips the breaker; exits always allowed; withdrawals are not mistaken for drawdowns; 1 h lockout after a stop |
-| **Honest arbitrage** | The Arbitrage Radar prices every HSK venue (HSKSwap, Hyperindex, WoofSwap, WETH triangles) at executable size. Live result: 150–157 bps gaps exist, but the side pools hold $72–$159, so every route loses before gas. The agent says so instead of pretending |
-| **Every decision provable** | Each decision (refusals included) is journaled, hashed and **Merkle-anchored on-chain**. `pnpm verify trade <tx>` re-derives the committee signers from the raw transaction |
-| **Mission Control** | Chat covers position size, trade frequency, risk appetite, target assets, stop-loss, take-profit and drawdown, plus "what if I buy 5 USDT of BTC now?" (the real Guardian, dry-run). Stricter changes are applied by the agent; looser ones need the owner's wallet. **Rebalance to USDT**: the signed-in owner asks the agent to convert part of a position; it becomes an EXIT proposal that both committee members must still sign (`POST /api/owner/rebalance`) |
+The agent's key **cannot sign its own trades.** The vault accepts a trade only with *k* of *n* EIP-712 permits from distinct committee members. Each permit binds the exact route, size, output floor, edge claim, expected value, prediction hash and policy hash. Change the rules or the committee, and every outstanding permit dies.
 
-## Verify it yourself (3 minutes, no wallet)
-1. **Try to break it.** Open the dashboard's *Try to break it* tab. It runs 15 real attacks against a live v2 vault with `eth_call` from your browser: stolen agent key, forged committee, outsider, guardian submitting, old policy, expired permit, route swap, drain, loosen, rewrite, committee takeover, ownership grab, breaker reset, fake stop-loss. **15/15 blocked**, each with the contract's own revert.
-2. **Verify a committee trade.** `cd agent && pnpm verify trade 0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584` (the first 2-of-2 countersigned trade on **mainnet**: 38 WHSK → 3.0188 USDT; add `--testnet` for testnet hashes). It decodes the transaction, recovers both committee signers from the EIP-712 permit, and checks membership, threshold, policy, sender and fill at the previous block: **14/14 PASS**.
-3. **Read the contracts.** Verified sources on Blockscout and Sourcify (addresses below).
+## Proof on HSK Chain mainnet
 
-## Deployments
+Real money, a real vault, real HSKSwap pools: all verifiable on [Blockscout](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030).
 
-### HSK Chain mainnet (177)
-| Contract | Address | Notes |
+| | What happened | Transaction |
 |---|---|---|
-| CountersignVault v1 implementation | [`0xd195…01BF`](https://hsk.blockscout.com/address/0xd195C15A02EAadDEBc4c2Aac0E87f768894401BF) | Sourcify exact + Blockscout full match |
-| VaultFactory v1 | [`0x28ae…fBfE`](https://hsk.blockscout.com/address/0x28ae19424647A051b95944DB26ffC0102085fBfE) | Sourcify exact + Blockscout full match |
-| Owner vault (v1) | [`0x76fB…9eE0`](https://hsk.blockscout.com/address/0x76fB3ae6c48964171a297C88a16513284CfB9eE0) | created by the owner's wallet |
-| **CountersignVault v2 implementation** | [`0x0728…1098`](https://hsk.blockscout.com/address/0x0728B021D518a916edC1dc7689d6fBD23d601098) | committee + permissionless stops · Sourcify exact + Blockscout full match |
-| **VaultFactory v2** | [`0x564a…6af4`](https://hsk.blockscout.com/address/0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4) | Sourcify exact + Blockscout full match |
-| **Owner vault v2 (live)** | [`0x5c13…2030`](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030) | 2-of-2 committee · **15/15 attacks blocked on mainnet** |
+| 🏦 | The owner creates a **2-of-2 committee vault** from their own wallet | [`0x50e4f0c4…0100`](https://hsk.blockscout.com/tx/0x50e4f0c427e15efe34ffab430705d186f50b5301354dfebecec97b846d560100) |
+| 💧 | The owner deposits 75 HSK as WHSK; the vault books its cost at the 30-minute TWAP | [`0xd186b87c…f864`](https://hsk.blockscout.com/tx/0xd186b87c6e84e10b88b09662585141c917075c64702da84cb70bcf5195e8f864) |
+| 🌳 | **475 decisions** (every refusal included) committed as one Merkle root | [`0x9ad3ce93…dea7`](https://hsk.blockscout.com/tx/0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7) |
+| 📈 | The keeper records the NAV high-water mark for the drawdown breaker | [`0x896f6901…879e`](https://hsk.blockscout.com/tx/0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e) |
+| ✍️ | **First countersigned trade.** The owner says *"rebalance 50% to USDT"*; the agent proposes it; the **Guardian and the Risk Officer both sign**; the vault executes 38 WHSK → **3.0188 USDT** (committee floor 3.0112) | [`0x6e02064a…4584`](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584) |
+| 🛡️ | **15 attacks** fired at the live vault (stolen agent key, forged committee, route swap, drain, takeover…): **15/15 blocked** by the contract's own reverts | [run them yourself](https://vendhan1512.github.io/Al-Trading-Automation/?run=1#break) |
 
-### HSK Chain testnet (133), v2
-| Contract | Address |
+## Verify it yourself in 3 minutes
+
+**1. Try to break it. No wallet, no gas.** Open **[the Break-It Arena](https://vendhan1512.github.io/Al-Trading-Automation/?run=1#break)**. Your browser fires 15 real attacks at the mainnet vault with `eth_call` and shows the vault's revert for each:
+
+| Attack | Vault says |
 |---|---|
-| CountersignVault v2 implementation | [`0xC5364E26d793e9745F095018B7288b8ED3112D4B`](https://testnet-explorer.hskchain.net/address/0xC5364E26d793e9745F095018B7288b8ED3112D4B) |
-| VaultFactory v2 | [`0xFe19ba9E01aeE243869DfBEFA7B423B13F645779`](https://testnet-explorer.hskchain.net/address/0xFe19ba9E01aeE243869DfBEFA7B423B13F645779) |
-| 2-of-2 committee vault | [`0xC425Bd94c290F5968CA2a2F10B8092c6152F03A1`](https://testnet-explorer.hskchain.net/address/0xC425Bd94c290F5968CA2a2F10B8092c6152F03A1) |
+| Agent signs its own permit (stolen agent key) | `InvalidPermit` |
+| Agent submits with no countersignature | `NotEnoughSignatures(0, 2)` |
+| Attacker forges a committee | `InvalidPermit` |
+| Outsider or Guardian submits a permit | `NotAgent` |
+| Permit signed under the old policy | `PolicyMismatch` |
+| Expired permit | `PermitExpired` |
+| Route swapped after signing | `PathMismatch` |
+| Agent withdraws, rewrites the mandate, replaces the committee or takes ownership | `NotOwner` |
+| Agent loosens a limit 10× | `NotTighter` |
+| Fake stop-loss on a healthy position | refused |
 
-On that vault, with real transactions: the agent's self-signed permit was refused (`InvalidPermit`), the Guardian alone was refused (`NotEnoughSignatures(1, 2)`), and the 2-of-2 committee-signed trade executed. Full list in [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md).
+**2. Verify the mainnet trade from raw chain data.**
+```bash
+cd agent && pnpm verify trade 0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584
+```
+```
+PASS  transaction succeeded              block 30722641
+PASS  target is a Countersign factory vault
+PASS  call is vault.execute
+PASS  sender was the vault's agent
+PASS  permit policy = vault policy (block-1)
+PASS  path hash matches the route
+PASS  every signer was on the committee  0x2697…6E29, 0xE278…ac5D
+PASS  signers are distinct               2 distinct
+PASS  threshold met (2-of-2)             2 signatures
+PASS  the agent did not sign its own permit
+PASS  TradeExecuted emitted by the vault
+PASS  event tradeId = permit tradeId
+PASS  fill >= the committee's minOut     3018754 >= 3011207
+PASS  expected value committed on-chain
+VERIFIED — 14/14 checks passed
+```
+It recovers both committee signers from the EIP-712 permit inside the transaction. Nothing is taken on trust from our database.
 
-Roles: agent `0x1709…bEA7` · Execution Guardian `0xE278…ac5D` · Risk Officer `0x2697…6E29` · owner `0x5bb8…4208`.
+**3. Verify any decision, refusals included.** `VAULT=0x5c13…2030 pnpm verify decision 474` re-hashes the decision, finds the anchored Merkle root on-chain and checks the proof: **VERIFIED 3/3.**
 
-## The 10 scenarios from the design, and where each is proven
+## Why it's different
+
+| If this happens… | A guardrailed vault | **Countersign** |
+|---|---|---|
+| The agent's key leaks | The attacker trades the full allowance within the caps | **Cannot trade at all.** The agent key alone fails `NotEnoughSignatures` |
+| The model is prompt-injected | Bad trades go through as long as they fit the caps | Two independent processes re-price it at the live quote; the Risk Officer runs **stricter limits** and can veto |
+| The agent and its server go offline mid-crash | The stop-loss waits for a keeper or for the agent | `stopOut()` is **permissionless**: anyone can fire it, on the 30-min TWAP, with a TWAP-anchored floor |
+| A whale wicks the pool for one block | The spot-priced stop fires into the wick | A one-block 1.5M WHSK dump does **not** trigger the TWAP stop (mainnet-fork test); the same crash held 30 minutes does |
+| A trade can't pay its own gas | It goes through and bleeds | Entries must carry a **committee-signed positive expected value after both fees, impact, exit and gas** |
+| The operator edits the history afterwards | Off-chain logs can be rewritten | Every decision is hashed and **Merkle-anchored**; any one re-verifies against the chain |
+| The owner wants it safer *now* | A new config, a redeploy, or trust | Say it in Mission Control; the agent applies **stricter-only** changes via `tighten()`; looser ones need the owner's wallet |
+
+## What the track asks for, and where Countersign does it
+
+| Requirement | Countersign |
+|---|---|
+| **Monitor markets & on-chain data** | Every 30 s: HSKSwap spot, 30-min TWAP, depth and price impact at size, pool flow, plus a reference median from HashKey Global, Gate, MEXC, Coinbase and the APRO oracle. A Data Reliability Engine rejects stale, crossed, wide or outlier books, and returns **WAIT** when no reliable reference exists |
+| **Identify signals & execute autonomously** | Three tiers: **A** cycle arbitrage, **B** spread reversion (HSKSwap vs the exchange median), **C** mean reversion with a **sworn prediction** (target, invalidation, probability; committed on-chain, graded later with a Brier score). The **Claude** strategist may take, shrink or skip a candidate, never enlarge it |
+| **Arbitrage & spreads in real time** | An Arbitrage Radar prices every HSK venue (HSKSwap, Hyperindex, WoofSwap, WETH triangles) at executable size and after gas. Live finding: 150–157 bps gaps exist, but the side pools hold $72–$159, so every route loses before gas. **The agent says so instead of pretending** |
+| **Strict risk controls & stop-loss** | Enforced by the vault: per-trade cap, daily volume, daily loss stop (exits still allowed), exposure per asset, cooldown, TWAP slippage floor, minimum edge, permissionless TWAP stop-loss and take-profit, NAV drawdown breaker, 1 h re-entry lockout, mandate expiry, pause, revoke. **Plus the 2-of-*n* committee in front of all of it** |
+| **Conversational interface** | **Mission Control**: "How are we doing?", "Why aren't you trading?", *"What if I buy 5 USDT of BTC now?"* (runs the real Guardian in dry-run), *"Low risk, only ETH and BTC, stop loss 2%"* (a diff card the owner signs), and **Rebalance to USDT** (owner request → committee-signed exit) |
+| **Built on HSK Chain + HSKSwap** | Mainnet vault, factory and implementation verified (Sourcify exact match and Blockscout); every swap goes through HSKSwap SwapRouter02; every TWAP comes from HSKSwap's own pools |
+
+## Mission Control and the dashboard
+
+The **[dashboard](https://vendhan1512.github.io/Al-Trading-Automation/)** is built to be played with, not just read:
+
+- **Vault Pour.** Your vault drawn as a glass jar filled with its live holdings. Drag through the scenes: deposit, a sealed trade, a stop-loss that converts the position, the breaker slamming the lid.
+- **Countersign Stage.** An envelope travels from the agent to the Guardian to the Risk Officer to the vault, collecting wax seals, or gets knocked off with the vault's real revert.
+- **Break-It Arena.** The 15 live attacks above, as projectiles hitting the vault.
+- **Decision heartbeat.** Every tick the agent journals, with WAIT streaks grouped and every Guardian check one click away.
+- **Markets and arbitrage radar.** Live gaps against the exchange median, with hover history.
+- **Mission Control.** Chat with the agent; sign in with your wallet (a signature only, no gas) to apply changes or request a rebalance.
+
+Run locally, it talks to the live agent. On GitHub Pages it shows a published snapshot of the same data.
+
+## How a trade happens
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as HSKSwap + reference venues
+    participant A as Agent (key #1)
+    participant G as Execution Guardian (key #2)
+    participant R as Risk Officer (key #3)
+    participant V as CountersignVault
+    participant S as HSKSwap
+    M->>A: quotes, TWAP, depth, reference median
+    A->>A: reliability check → candidates → Claude strategist → sworn prediction
+    A->>G: proposal (intent only: tier, asset, side, size)
+    G->>G: re-derive every price, 20+ checks, expected value after gas
+    G->>R: EIP-712 permit + signature
+    R->>R: stricter limits, concentration, optional Claude veto
+    R-->>A: co-signature (or REJECT with reasons)
+    A->>V: execute(permit, signatures sorted by signer)
+    V->>V: k-of-n distinct committee signers, policy hash, path hash, TWAP floor, mandate
+    V->>S: exactInput through SwapRouter02
+    V-->>A: TradeExecuted(tradeId) — then journaled and Merkle-anchored
+```
+
+## Tested
+
+**217 tests**, all passing:
+
+- **101 contract tests** (Foundry): unit tests, v2 committee tests, invariants with a liveness check, and **8 against the real HSKSwap pools on a mainnet fork** (TWAP stop vs one-block wick, TWAP floor vs a worthless `minOut`, breaker, re-entry lockout).
+- **116 agent tests** (Vitest): reliability engine, candidates, Guardian and Risk Officer, transaction-manager recovery, copilot, owner sessions and requests, Merkle evidence.
+
+Every scenario from the design document has a named test:
+
 | Scenario | Behaviour | Proof |
 |---|---|---|
-| 1. False opportunity (stale quote) | Stale/wide/crossed/outlier sources excluded; no reliable reference → WAIT | `agent/test/engine.test.ts` "Scenario 1"; live verdict excludes HashKey Global's 1729/2130 ETH book |
-| 2. Low liquidity | Impact above the limit → REJECT; Risk Officer is stricter (30 vs 50 bps) | `guardian.test.ts` "Scenario 2", `v2.test.ts` |
-| 3. Slippage changes before execution | TWAP floor + router minimum → revert, never a silent bad fill | `test_Revert_RouterMinOutWhenMarketMoves`, fork `TwapFloorRejectsWorthlessMinOut` |
-| 4. Duplicate submission | Blocked locally and on-chain (`usedTradeIds`) | `phase5.test.ts` "Scenario 4", `test_Attack_ReplayTradeId` |
-| 5. AI exceeds its mandate | Guardian REJECT; vault `TradeTooLarge` | `guardian.test.ts` "Scenario 5", `testFuzz_CapAlwaysEnforced` |
-| 6. Daily loss limit | Entries stop, exits continue, UTC reset | `test_DailyLoss_BlocksEntries_AllowsExits_ResetsNextDay` |
-| 7. Strategy deteriorates | Circuit breaker: the agent pauses or tightens its own vault; NAV drawdown breaker on-chain | `phase5.test.ts` "Scenario 7", `test_Breaker_*` |
-| 8. Owner revokes the agent | `setAgent(0)`; permissionless stops keep working | `test_RevokeAgent`, `test_StopLoss_WorksWithAgentRevokedAndVaultPaused` |
-| 9. RPC failure | Market REJECT, no state changes, reconcile before resuming | `engine.test.ts` "Scenario 9", `phase5.test.ts` "RPC down" |
-| 10. Prediction is wrong | Sworn prediction graded INVALIDATED (write-once); exit; Brier tracked separately from P&L | `phase5.test.ts` grading tests |
-
-## Architecture
-- `contracts/`: Solidity 0.8.26 / Foundry. `CountersignVault` (k-of-n permits, mandate, TWAP floors, permissionless stops, breaker, anchoring), `VaultFactory` (EIP-1167 clones). **95 tests**: 63 unit, 20 v2, 4 invariants with a liveness check, 8 on a mainnet fork against the real HSKSwap pools.
-- `agent/`: TypeScript / viem. Market data + Data Reliability Engine → deterministic candidates (Tier A arbitrage scanner, Tier B spread, Tier C mean reversion) → Strategy Filter → **Claude** strategist (may only take, shrink or skip; rules-only fallback) → sworn prediction → **Execution Guardian** (process + key #2) → **Risk Officer** (process + key #3, optional Claude veto) → transaction manager with reconcile-first recovery → keeper (stops, breaker) → strategy health → Merkle anchoring. **112 unit tests + 2 live tests.**
-- `ui/`: the dashboard. React 19 + TypeScript + Tailwind v4 + Motion, shadcn-style `src/components/ui/`. Hand-drawn SVG stages with real physics: the **Vault Pour** (your vault as a glass jar filled with its live holdings; a stop-loss knocks it off the stage), the **Countersign Stage** (a permit collects the Guardian's and the Risk Officer's wax seals, or is knocked off with the vault's real revert), the **Break-It Arena** (15 live `eth_call` attacks fired at the vault, `?run=1` to start on load), a decision **heartbeat**, and Mission Control. Works against the live agent or the published snapshot; `pnpm --filter @countersign/ui dev` proxies `/api` to the agent. The Vault Pour interaction is inspired by Aakash Mehra's Coffee Pour Menu.
-- `web/`: the snapshot data (`web/data/`, written by `pnpm publish-site`) and the original dependency-free dashboard, served as a fallback when `ui/dist` isn't built.
-- `tools/owner-console/`: the owner's wallet page (create vault, deposit, pause, revoke, withdraw).
-- `research/`: [pools.md](research/pools.md) (venue measurements) and [backtest.md](research/backtest.md) (30-day replay of the live rules).
+| False opportunity (stale quote) | Stale, wide, crossed or outlier sources excluded; no reliable reference → WAIT | `engine.test.ts` "Scenario 1" |
+| Low liquidity | Impact above the limit → REJECT; the Risk Officer is stricter (30 vs 50 bps) | `guardian.test.ts` "Scenario 2", `v2.test.ts` |
+| Slippage moves before execution | TWAP floor + router minimum → revert, never a silent bad fill | `test_Revert_RouterMinOutWhenMarketMoves`, fork `TwapFloorRejectsWorthlessMinOut` |
+| Duplicate submission | Blocked locally and on-chain (`usedTradeIds`) | `phase5.test.ts` "Scenario 4", `test_Attack_ReplayTradeId` |
+| AI exceeds its mandate | Guardian REJECT; vault `TradeTooLarge` | `guardian.test.ts` "Scenario 5", `testFuzz_CapAlwaysEnforced` |
+| Daily loss limit | Entries stop, exits continue, UTC reset | `test_DailyLoss_BlocksEntries_AllowsExits_ResetsNextDay` |
+| Strategy deteriorates | Circuit breaker pauses or tightens; NAV drawdown breaker on-chain | `phase5.test.ts` "Scenario 7", `test_Breaker_*` |
+| Owner revokes the agent | `setAgent(0)`; permissionless stops keep working | `test_StopLoss_WorksWithAgentRevokedAndVaultPaused` |
+| RPC failure | Market REJECT, no state changes, reconcile before resuming | `engine.test.ts` "Scenario 9" |
+| Prediction is wrong | Graded INVALIDATED (write-once); exit; Brier tracked apart from P&L | `phase5.test.ts` grading tests |
 
 ## What the backtest taught us
-30 days of real HSKSwap swaps (2,750) and exchange candles, live defaults, **nothing tuned**:
+
+30 days of real HSKSwap swaps (2,750) and exchange candles, replayed through the live rules, **nothing tuned**:
 
 | Policy | WHSK | WETH | WBTC | Total (USDT) |
 |---|---|---|---|---|
@@ -79,24 +185,71 @@ Roles: agent `0x1709…bEA7` · Execution Guardian `0xE278…ac5D` · Risk Offic
 | First Guardian (valued entries at full gap convergence) | −0.80 | −1.80 | −1.72 | **−4.32** |
 | **Fixed Guardian (values entries at the strategy's own half-gap exit)** | **−0.07** | **+0.08** | **−0.64** | **−0.63** |
 
-The replay exposed a real flaw: the first Guardian assumed the whole gap would close while the strategy only targets half of it, so it approved trades whose own target couldn't pay two pool fees plus gas. After the fix the gate refuses about 99% of candidates and **cuts losses by 91%**. This does not prove a profitable edge, and we don't claim one. It shows the committee refuses most trades that can't pay their costs. WBTC still loses (its pool sits ~240 bps under the exchanges for hours), so we report that honestly rather than tune a filter to the same data.
+The replay found a real flaw: the first Guardian assumed the whole gap would close, while the strategy only targets half of it, so it approved trades whose own target couldn't pay two pool fees plus gas. After the fix the committee refuses about 99% of candidates and **cuts losses by 91%**. That is not a profitable edge, and we don't claim one. It shows the committee refuses trades that can't pay for themselves. Full write-up: [research/backtest.md](research/backtest.md). Venue measurements: [research/pools.md](research/pools.md).
+
+## Deployments
+
+**HSK Chain mainnet (177)**
+
+| Contract | Address | Verification |
+|---|---|---|
+| **Owner vault, 2-of-2 committee (live)** | [`0x5c13500A4aD4277a13C7d774a78Cfd267A202030`](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030) | factory clone |
+| CountersignVault v2 implementation | [`0x0728B021D518a916edC1dc7689d6fBD23d601098`](https://hsk.blockscout.com/address/0x0728B021D518a916edC1dc7689d6fBD23d601098) | Sourcify exact + Blockscout full |
+| VaultFactory v2 | [`0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4`](https://hsk.blockscout.com/address/0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4) | Sourcify exact + Blockscout full |
+| HSKSwap SwapRouter02 (used) | [`0x2c16f75b95Cf1390c328aB70e2CEE7f4b80bD8F3`](https://hsk.blockscout.com/address/0x2c16f75b95Cf1390c328aB70e2CEE7f4b80bD8F3) | HSKSwap |
+
+Roles: agent `0x1709…bEA7` · Execution Guardian `0xE278…ac5D` · Risk Officer `0x2697…6E29` · owner `0x5bb8…4208`.
+
+**HSK Chain testnet (133):** v2 implementation [`0xC536…2D4B`](https://testnet-explorer.hskchain.net/address/0xC5364E26d793e9745F095018B7288b8ED3112D4B), factory [`0xFe19…5779`](https://testnet-explorer.hskchain.net/address/0xFe19ba9E01aeE243869DfBEFA7B423B13F645779), 2-of-2 vault [`0xC425…03A1`](https://testnet-explorer.hskchain.net/address/0xC425Bd94c290F5968CA2a2F10B8092c6152F03A1). There, with real transactions: the agent's self-signed permit was refused (`InvalidPermit`), the Guardian alone was refused (`NotEnoughSignatures(1, 2)`), and the committee-signed trade executed ([`0x4cbbc0e4…c24f`](https://testnet-explorer.hskchain.net/tx/0x4cbbc0e4a64e95505e3fd92ba43a6f25ed84e04df47d432d95852bd5ea65c24f)).
+
+Every address and transaction: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md). The v1 deployment is kept there for the record.
 
 ## Run it
+
 ```bash
 pnpm install
-cd contracts && forge test && cd ..                 # contracts (fork tests need network access)
-pnpm --filter @countersign/agent test               # agent
-pnpm --filter @countersign/agent guardian           # terminal 1 — Execution Guardian (GUARDIAN_PK only)
-pnpm --filter @countersign/agent risk               # terminal 2 — Risk Officer (RISK_OFFICER_PK only)
-pnpm --filter @countersign/agent agent              # terminal 3 — agent (AGENT_PK only), dashboard at http://localhost:8787
+cd contracts && forge test && cd ..           # 101 contract tests (fork tests need network access)
+pnpm --filter @countersign/agent test         # 116 agent tests
+
+# three processes, three keys — each refuses to start if it can see another role's key
+pnpm --filter @countersign/agent guardian     # terminal 1: Execution Guardian (GUARDIAN_PK)
+pnpm --filter @countersign/agent risk         # terminal 2: Risk Officer (RISK_OFFICER_PK)
+pnpm --filter @countersign/agent agent        # terminal 3: agent (AGENT_PK), dashboard at http://localhost:8787
 ```
-Each process loads only its own key from `.env` and refuses to start if another role's key is visible. `AGENT_MODE=live VAULT=0x…` turns on trading.
+
+`AGENT_MODE=live` and `VAULT=0x…` turn on trading; without them the agent runs the full loop in **shadow mode** and never sends a transaction. Owners create vaults, deposit, pause, revoke and withdraw from `tools/owner-console/` in their own wallet. Countersign never sees the owner's key.
+
+## Architecture
+
+```
+contracts/   Solidity 0.8.26 · Foundry
+             CountersignVault — k-of-n EIP-712 permits, mandate, TWAP floors, permissionless stops,
+                                drawdown breaker, re-entry lockout, tighten-only, Merkle anchoring
+             VaultFactory     — EIP-1167 clones, one vault per owner
+agent/       TypeScript · viem · Claude
+             market data → Data Reliability Engine → candidates (A/B/C) → strategy filter
+             → Claude strategist (take/shrink/skip) → sworn prediction → Execution Guardian
+             → Risk Officer (optional Claude veto) → tx manager (reconcile-first) → keeper
+             → strategy health → Merkle anchoring · Mission Control copilot · `verify` CLI
+ui/          React 19 · TypeScript · Tailwind v4 · Motion · shadcn-style components
+web/data/    published snapshot read by GitHub Pages
+tools/       owner console (create vault, deposit, pause, revoke, withdraw)
+research/    venue measurements and the 30-day backtest
+```
 
 ## Honest limits
-- Unaudited hackathon code. Sizes are deliberately tiny.
-- On this deployment the three keys run as separate processes on one host. Production would put the committee in HSMs or with independent operators (the owner can rotate it).
-- HSKSwap's real liquidity is a star around USDT, so on-chain cycle arbitrage (Tier A) is dormant. Spread trades (Tier B) carry price risk between entry and exit.
-- We claim **no sustained profitability**. We claim the AI cannot act alone, and every edge claim is committed and checkable.
+
+- **Unaudited hackathon code.** Mainnet sizes are deliberately tiny (the vault holds about $6).
+- **The mainnet trade was requested by the owner.** At this size, the committee has so far refused every autonomous entry because it can't pay its own gas (about $0.0125 per swap at 500 gwei). That is the rule working as designed, and every refusal is in the anchored journal.
+- In this deployment the three keys run as separate processes on one machine. In production the committee belongs in HSMs or with independent operators; the owner can rotate it at any time.
+- HSKSwap's liquidity is a star around USDT, so on-chain cycle arbitrage (Tier A) is dormant, and spread trades (Tier B) carry price risk between entry and exit.
+- **We claim no profit.** We claim the AI cannot act alone, and that every claim it makes is committed and checkable.
 - HSP (Track 2) is not integrated.
 
-🤖 Built with [Claude Code](https://claude.com/claude-code).
+<div align="center">
+
+**The AI proposes. The committee countersigns. The vault decides.**
+
+Built with [Claude Code](https://claude.com/claude-code) · Dashboard's Vault Pour interaction inspired by Aakash Mehra's Coffee Pour Menu
+
+</div>
