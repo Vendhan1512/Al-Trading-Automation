@@ -75,6 +75,7 @@ Agent `0x1709…bEA7`; committee Execution Guardian `0xE278…ac5D` + Risk Offic
 `InvalidPermit` (stolen agent key) · `NotEnoughSignatures(0, 2)` (no countersignature) · `InvalidPermit` (forged committee) · `NotAgent` (outsider; guardian submitting) · `PolicyMismatch` (old policy) · `PermitExpired` · `PathMismatch` (route swap) · `NotOwner` (withdraw, rewrite mandate, replace committee, take ownership, guardian unpause) · `NotTighter` (loosen cap 10×) · fake stop-loss refused.
 
 **Live on mainnet (27 Nov 2026)**: owner deposited 1 HSK as WHSK ([`0x766228e7…c7b5`](https://hsk.blockscout.com/tx/0x766228e7d2893d3c94b611e255185b2f1a6a16b8181b1c2e0108419f24f1c7b5)); Guardian, Risk Officer and agent started as three processes with three keys.
+Owner then deposited **75 HSK as WHSK** (vault: 76 WHSK ≈ 6.04 USDT cost basis at the 30-min TWAP): [`0xd186b87c…f864`](https://hsk.blockscout.com/tx/0xd186b87c6e84e10b88b09662585141c917075c64702da84cb70bcf5195e8f864).
 
 | Agent action | Transaction |
 |---|---|

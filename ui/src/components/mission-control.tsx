@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, KeyRound, Sparkles } from "lucide-react";
+import { ArrowUp, ArrowRightLeft, ExternalLink, KeyRound, Sparkles } from "lucide-react";
 import { api, post } from "@/lib/api";
 import { bps, num, short } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,66 @@ const getSession = (): Session | null => {
     return s && Date.now() - Date.parse(s.issuedAt) < 14 * 60_000 ? s : null;
   } catch { return null; }
 };
+
+type OwnerReq = { id: string; asset: string; percent: number; at: number; status: "QUEUED" | "RUNNING" | "EXECUTED" | "NOT_EXECUTED"; result: string | null; txHash: string | null };
+
+/** Owner rebalance: the signed-in owner asks the agent to convert part of a position to USDT.
+ *  It becomes an EXIT proposal that BOTH committee members must sign; the page never moves funds. */
+function Rebalance({ session, signIn, explorer }: { session: Session | null; signIn: () => Promise<void>; explorer?: string }) {
+  const [pct, setPct] = React.useState(50);
+  const [reqs, setReqs] = React.useState<OwnerReq[]>([]);
+  const [note, setNote] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const load = React.useCallback(() => api<{ requests: OwnerReq[] }>("/api/owner/requests").then((r) => setReqs(r.requests)).catch(() => undefined), []);
+  React.useEffect(() => {
+    load();
+    const t = setInterval(load, 4000);
+    return () => clearInterval(t);
+  }, [load]);
+  const active = reqs.find((r) => r.status === "QUEUED" || r.status === "RUNNING");
+  const submit = async () => {
+    const s = getSession();
+    if (!s) return signIn();
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await post<any>("/api/owner/rebalance", { asset: "WHSK", percent: pct, auth: s });
+      setNote(r.status === "QUEUED" ? r.note : `Not queued: ${r.reason}`);
+      load();
+    } catch (e) {
+      setNote(`Not queued: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const label: Record<OwnerReq["status"], string> = { QUEUED: "waiting for the next tick", RUNNING: "committee is checking", EXECUTED: "executed on-chain", NOT_EXECUTED: "not executed" };
+  return (
+    <div className="rounded-2xl border border-mint/40 bg-mint/[0.06] p-4">
+      <div className="flex items-center gap-2 font-display font-semibold"><ArrowRightLeft className="size-4 text-mint" /> Rebalance to USDT</div>
+      <p className="mt-1 text-[13px] text-mist">Ask the agent to convert part of the vault's WHSK to USDT. It becomes an exit proposal that the Guardian <em>and</em> the Risk Officer must both sign; the vault re-checks the TWAP floor. Funds never leave the vault.</p>
+      <div className="mt-3 flex items-center gap-3">
+        <input type="range" min={10} max={100} step={5} value={pct} onChange={(e) => setPct(Number(e.target.value))} aria-label="Share of WHSK to convert" className="flex-1 accent-[#3dd6a3]" />
+        <span className="tnum w-12 text-right font-mono text-[13px]">{pct}%</span>
+      </div>
+      <Button size="sm" className="mt-3 w-full" disabled={busy || !!active} onClick={submit}>
+        {session ? (active ? "Request in progress…" : `Convert ${pct}% of WHSK`) : "Owner sign-in to request"}
+      </Button>
+      {note && <p className="mt-2 text-[12px] text-mist">{note}</p>}
+      {reqs.slice(0, 3).map((r) => (
+        <div key={r.id} className="mt-2 rounded-xl bg-ink-2/70 px-3 py-2 text-[12px]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-fog">{r.percent}% {r.asset} → USDT</span>
+            <span className={cn("font-mono", r.status === "EXECUTED" ? "text-mint" : r.status === "NOT_EXECUTED" ? "text-coral" : "text-amber")}>{label[r.status]}</span>
+          </div>
+          {r.txHash && explorer && (
+            <a href={`${explorer}/tx/${r.txHash}`} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 font-mono text-sky hover:underline">{short(r.txHash)} <ExternalLink className="size-3" /></a>
+          )}
+          {r.result && r.status !== "EXECUTED" && <div className="mt-1 text-dim">{r.result}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const CHIPS = ["How are we doing?", "Why aren't you trading?", "What if I buy 5 USDT of BTC now?", "Low risk, only trade ETH and BTC, stop loss 2%", "Max trade 3 USDT and stop for the day after losing 0.5"];
 
@@ -228,6 +288,7 @@ export function MissionControl({ config, staticMode }: { config?: Config | null;
         </form>
       </div>
       <div className="space-y-3">
+        {!staticMode && <Rebalance session={session} signIn={signIn} explorer={config?.explorer} />}
         {[
           ["Stricter changes", "Smaller size, slower, fewer assets, lower risk. The agent applies them on-chain via tighten() once the owner is signed in."],
           ["Looser changes", "Only the owner's wallet can sign them (setMandate). The copilot never holds owner power."],

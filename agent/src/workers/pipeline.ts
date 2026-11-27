@@ -16,6 +16,7 @@ import { maybeAnchor } from "../modules/evidence/anchor.js";
 import type { ChainOps, TxManager } from "../modules/transactions/tx-manager.js";
 import type { GuardianResponse, Proposal } from "../guardian/types.js";
 import type { Candidate } from "../modules/strategies/types.js";
+import { amountForPercent, finishOwnerRequest, takeOwnerRequest } from "../modules/owner/requests.js";
 
 export type AgentMode = "shadow" | "live";
 
@@ -66,7 +67,7 @@ async function countersignAndExecute(
   ctx: PipelineCtx,
   proposal: Proposal,
   prediction: Prediction | null,
-): Promise<{ g: GuardianResponse | null; risk: CosignResponse | null; line: string; executed: boolean; txStatus: string | null; unreachable?: string }> {
+): Promise<{ g: GuardianResponse | null; risk: CosignResponse | null; line: string; executed: boolean; txStatus: string | null; unreachable?: string; hash?: string }> {
   const dryRun = ctx.mode !== "live" || !ctx.vault || !ctx.tx;
   const g = await ctx.guardian.evaluate(proposal, dryRun);
   if ("unreachable" in g) return { g: null, risk: null, line: `Guardian unreachable (${g.unreachable}); no trade without a countersignature`, executed: false, txStatus: null, unreachable: g.unreachable };
@@ -110,7 +111,7 @@ async function countersignAndExecute(
         payload: prediction,
       });
     }
-    return { g, risk, line: `COMMITTEE APPROVE ${econ} — tx ${status} ${row?.hash ?? sub.hash}`, executed: status === "CONFIRMED", txStatus: status };
+    return { g, risk, line: `COMMITTEE APPROVE ${econ} — tx ${status} ${row?.hash ?? sub.hash}`, executed: status === "CONFIRMED", txStatus: status, hash: row?.hash ?? sub.hash };
   } finally {
     ctx.inFlight.delete(proposal.asset);
     if (g.permit) await ctx.guardian.release(g.permit.tradeId);
@@ -191,6 +192,26 @@ export async function runPipeline(ctx: PipelineCtx, health: MarketHealth): Promi
           journal("keeper", null, "FAILED", `checkBreaker failed: ${(e as Error).message.split(/\r?\n/)[0]}`, {});
         }
       }
+    }
+  }
+
+  // 15b — owner rebalance request (signed-in owner asked to convert part of a position to USDT).
+  // Same path as any exit: the committee must countersign it and the vault re-checks everything.
+  const req = takeOwnerRequest();
+  if (req) {
+    const pos = vault.positions.find((p) => p.asset === req.asset);
+    const amountIn = pos ? amountForPercent(pos.qty, req.percent) : 0n;
+    if (amountIn <= 0n) {
+      finishOwnerRequest(req.id, false, `no ${req.asset} position to convert`);
+      journal("owner", req.asset, "REFUSED", `OWNER REBALANCE ${req.percent}% ${req.asset} → USDT — refused: no tracked position`, { request: req });
+    } else {
+      const proposal: Proposal = { proposalId: req.id, vault: ctx.vault, tier: "EXIT", asset: req.asset, side: "SELL", amountIn: amountIn.toString(), prediction: null, predictionHash: null, strategist: null, candidateId: null };
+      const r = await countersignAndExecute(ctx, proposal, null);
+      if (r.g?.decision === "APPROVE") approved++;
+      if (r.executed) (executed++, exits++);
+      const outcome = r.executed ? "EXECUTED" : r.risk && r.risk.decision !== "APPROVE" ? r.risk.decision : (r.g?.decision ?? "WAIT");
+      finishOwnerRequest(req.id, r.executed, r.line, r.executed ? (r.hash ?? null) : null);
+      journal("owner", req.asset, outcome, `OWNER REBALANCE ${req.percent}% ${req.asset} → USDT (requested by ${req.requestedBy}) — ${r.line}`, { request: req, proposal, guardian: r.g, risk: r.risk });
     }
   }
 

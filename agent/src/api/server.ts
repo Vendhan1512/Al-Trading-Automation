@@ -11,7 +11,8 @@ import { scanRadar, type RadarReport } from "../modules/arbitrage/radar.js";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve } from "node:path";
 import { chat, proposeMandateChange, whatIf, type CopilotCtx } from "../copilot/copilot.js";
-import { applyMandate, sessionMessage } from "../copilot/owner.js";
+import { applyMandate, sessionMessage, verifyOwner } from "../copilot/owner.js";
+import { enqueueOwnerRequest, listOwnerRequests } from "../modules/owner/requests.js";
 import type { GuardianClient } from "../modules/execution/guardian-client.js";
 import type { ChainOps } from "../modules/transactions/tx-manager.js";
 
@@ -188,6 +189,8 @@ routes["/api/owner/message"] = (_q, res, url) => {
   send(res, 200, { issuedAt, message: sessionMessage(chain.vault, chain.net.chainId, issuedAt) });
 };
 
+routes["/api/owner/requests"] = (_q, res) => send(res, 200, { requests: listOwnerRequests() });
+
 // ---------------- POST routes (copilot / what-if / mandate). Rate-limited; never move funds.
 const post: Record<string, (body: any) => Promise<unknown>> = {
   "/api/copilot": async (b) => {
@@ -204,6 +207,22 @@ const post: Record<string, (body: any) => Promise<unknown>> = {
   "/api/mandate/propose": async (b) => {
     if (!copilotCtx) throw new Error("copilot unavailable");
     return proposeMandateChange(copilotCtx, b?.changes ?? {});
+  },
+  // Owner asks the agent to convert part of a position to USDT. Queued for the next tick, where it
+  // becomes an EXIT proposal that BOTH committee members must sign; this route never moves funds.
+  "/api/owner/rebalance": async (b) => {
+    if (!chain?.vault) throw new Error("no vault configured");
+    const asset = String(b?.asset ?? "").toUpperCase();
+    if (!["WHSK", "WETH", "WBTC"].includes(asset)) throw new Error("asset must be WHSK, WETH or WBTC");
+    const percent = Number(b?.percent);
+    if (!Number.isFinite(percent) || percent < 1 || percent > 100) throw new Error("percent must be between 1 and 100");
+    const who = await verifyOwner(chain.client, chain.net, chain.vault, b?.auth);
+    if (!who.ok) return { status: "REFUSED", reason: who.reason };
+    const v = await readVaultState(chain.client, chain.net, chain.vault);
+    const pos = v.positions.find((p) => p.asset === asset);
+    if (!pos || pos.qty === 0n) return { status: "REFUSED", reason: `the vault holds no tracked ${asset}` };
+    const req = enqueueOwnerRequest({ asset: asset as never, percent, requestedBy: b.auth.address });
+    return { status: "QUEUED", request: req, note: "The agent picks this up on its next tick (about 30 s). The Guardian and the Risk Officer must both sign before the vault executes it." };
   },
   "/api/mandate/apply": async (b) => {
     if (!chain?.vault) throw new Error("no vault configured");
