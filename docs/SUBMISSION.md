@@ -33,7 +33,8 @@ Most AI trading agents run on a single hot key. Three things can go wrong:
 | VaultFactory v2 | `0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4` (Sourcify exact + Blockscout full) |
 | Owner's 2-of-2 vault | `0x5c13500A4aD4277a13C7d774a78Cfd267A202030` (15/15 attacks blocked on mainnet) |
 | First countersigned trade | _tx_ |
-| Decision anchor | _tx_ |
+| Decision anchor #0 (475 decisions, one Merkle root) | `0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7` · `pnpm verify decision 474` → VERIFIED 3/3 |
+| Keeper `checkBreaker` (high-water mark) | `0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e` |
 
 **Tests:** 101 contract tests (unit, v2, invariants, mainnet-fork) and 113 agent tests.
 

@@ -74,6 +74,15 @@ Agent `0x1709…bEA7`; committee Execution Guardian `0xE278…ac5D` + Risk Offic
 **Try to break it, mainnet (27 Nov 2026): 15/15 blocked**, each by `eth_call` against this vault:
 `InvalidPermit` (stolen agent key) · `NotEnoughSignatures(0, 2)` (no countersignature) · `InvalidPermit` (forged committee) · `NotAgent` (outsider; guardian submitting) · `PolicyMismatch` (old policy) · `PermitExpired` · `PathMismatch` (route swap) · `NotOwner` (withdraw, rewrite mandate, replace committee, take ownership, guardian unpause) · `NotTighter` (loosen cap 10×) · fake stop-loss refused.
 
+**Live on mainnet (27 Nov 2026)**: owner deposited 1 HSK as WHSK ([`0x766228e7…c7b5`](https://hsk.blockscout.com/tx/0x766228e7d2893d3c94b611e255185b2f1a6a16b8181b1c2e0108419f24f1c7b5)); Guardian, Risk Officer and agent started as three processes with three keys.
+
+| Agent action | Transaction |
+|---|---|
+| Keeper records the NAV high-water mark (`checkBreaker`) | [`0x896f6901…879e`](https://hsk.blockscout.com/tx/0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e) |
+| Anchor #0: decisions 0–474 committed as one Merkle root | [`0x9ad3ce93…dea7`](https://hsk.blockscout.com/tx/0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7) |
+
+`VAULT=0x5c13…2030 pnpm verify decision 474` → decision re-hashes · anchor root on-chain · Merkle proof verifies → **VERIFIED 3/3**.
+
 ## HSK mainnet (chain 177), v1 — deployed 23 Nov 2026 (superseded, kept for the record)
 | Contract | Address | Verification |
 |---|---|---|

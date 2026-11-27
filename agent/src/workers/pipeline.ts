@@ -184,6 +184,8 @@ export async function runPipeline(ctx: PipelineCtx, health: MarketHealth): Promi
       if ((newHigh || breach) && ctx.mode === "live" && ctx.ops) {
         try {
           const h = await ctx.ops.checkBreaker(ctx.vault);
+          // mine it before anything else this cycle sends (anchoring), or the next tx can race its nonce
+          await ctx.client.waitForTransactionReceipt({ hash: h, timeout: 120_000 }).catch(() => null);
           journal("keeper", null, breach ? "TRIPPED" : "HWM", `keeper called checkBreaker (${breach ? "drawdown breach" : "new NAV high"}; NAV ${(Number(vault.nav) / 1e6).toFixed(4)} USDT) — tx ${h}`, { nav: vault.nav, hwm: vault.highWaterMark, tx: h });
         } catch (e) {
           journal("keeper", null, "FAILED", `checkBreaker failed: ${(e as Error).message.split(/\r?\n/)[0]}`, {});

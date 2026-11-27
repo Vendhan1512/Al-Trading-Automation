@@ -133,7 +133,7 @@ const DEFAULT_RISK = "0x2697e6bbac5959F66bAf916Ac024aF045ec16E29";
 const FACTORY_ABI = [
   "function createVault(address agent,address[] guardians,uint8 threshold,address quote,address[] assets,uint24[] assetFees,(uint128 maxTradeQuote,uint128 dailyVolumeQuote,uint128 dailyLossQuote,uint128 maxExposureQuote,uint128 minArbProfitQuote,uint32 cooldown,uint32 twapWindow,uint16 maxSlippageBps,uint16 minEdgeBps,uint8 tiersMask,uint8 assetsMask,uint64 expiry,uint128 minNetValueQuote,uint16 stopLossBps,uint16 takeProfitBps,uint16 maxDrawdownBps) mandate) returns (address)",
   "function vaultsOf(address owner) view returns (address[])",
-  "event VaultCreated(address indexed owner, address indexed vault, address agent, address guardian)",
+  "event VaultCreated(address indexed owner, address indexed vault, address agent, address[] guardians, uint8 threshold)",
 ];
 const VAULT_ABI = [
   "function owner() view returns (address)", "function agent() view returns (address)", "function guardian() view returns (address)", "function guardians() view returns (address[])", "function threshold() view returns (uint8)",
