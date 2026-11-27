@@ -50,6 +50,10 @@
       <div>HSK balance</div><div id="bal">—</div>
       <div>Factory</div><div class="mono" id="factory">—</div>
     </div>
+    <div class="row" style="margin-top:12px">
+      <input id="gasAmt" type="number" step="any" value="15" style="width:90px" /> HSK
+      <button class="secondary" id="fundAgent" disabled title="The Agent wallet pays gas for countersigned trades, stop-loss calls and decision anchors">Send gas to Agent</button>
+    </div>
   </div>
 
   <div class="card">
@@ -184,7 +188,7 @@ async function connect() {
     $("factory").innerHTML = `<a target="_blank" href="${NETS[chainId].explorer}/address/${deploy.vaultFactory}">${deploy.vaultFactory}</a>`;
     quoteDecimals = Number(await new Contract(deploy.quote, ERC20_ABI, provider).decimals());
     $("assetsHint").textContent = `Quote: ${deploy.quote} (${quoteDecimals} decimals). Tradable assets: ${deploy.assets.join(", ")}. TWAP window: ${NETS[chainId].twap / 60} min.`;
-    $("create").disabled = false; $("refresh").disabled = false;
+    $("create").disabled = false; $("refresh").disabled = false; $("fundAgent").disabled = false;
     log(`Connected ${account} on chain ${chainId}.`, "ok");
     await refreshVaults();
   } catch (e) { log(e.message, "err"); }
@@ -269,6 +273,12 @@ $("depositHsk").onclick = async () => {
   await send("Wrap HSK → WHSK", () => whsk.deposit({ value: amt }));
   await send("Approve WHSK", () => whsk.approve($("vaults").value, amt));
   await send("Deposit WHSK into vault", () => v.depositAsset(deploy.assets[0], amt));
+};
+$("fundAgent").onclick = async () => {
+  const to = $("agent").value.trim(), amt = parseUnits($("gasAmt").value || "0", 18);
+  if (amt === 0n) return log("Enter an HSK amount first.", "warn");
+  try { log(`Send ${$("gasAmt").value} HSK gas to Agent ${to}: confirm in your wallet…`); const tx = await signer.sendTransaction({ to, value: amt }); log(`Submitted: ${tx.hash}`); await tx.wait(); log("Agent funded.", "ok"); }
+  catch (e) { log(e.shortMessage || e.message, "err"); }
 };
 $("pause").onclick = () => send("Pause", () => vault().pause());
 $("unpause").onclick = () => send("Unpause", () => vault().unpause());
