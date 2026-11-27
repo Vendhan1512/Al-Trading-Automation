@@ -60,7 +60,7 @@ export function Verifier() {
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <div className="rounded-3xl border border-line/80 bg-panel/70 p-5">
         <div className="flex items-center gap-2 font-display text-lg font-semibold"><ShieldCheck className="size-5 text-mint" /> Verify any trade</div>
-        <p className="mt-1 text-[13.5px] text-mist">Paste a Countersign trade. Your browser decodes it, recovers who signed the permit, and checks them against the vault's committee at the block before. No wallet, no server of ours.</p>
+        <p className="mt-1 text-[13.5px] text-mist">Paste a Dojang trade. Your browser decodes it, recovers who signed the permit, and checks them against the vault's committee at the block before. No wallet, no server of ours.</p>
         <div className="mt-4 flex gap-1.5 rounded-xl bg-ink-2 p-1 text-[12.5px]">
           {[177, 133].map((c) => (
             <button key={c} onClick={() => setChainId(c)} className={cn("flex-1 rounded-lg px-3 py-1.5 transition-colors", chainId === c ? "bg-panel-2 text-fog" : "text-dim hover:text-mist")}>

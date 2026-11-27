@@ -84,7 +84,7 @@ export default function App() {
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-5 sm:px-8">
           <a href="#" className="flex items-center gap-2.5">
             <Logo />
-            <span className="font-display text-[17px] font-bold tracking-tight">Countersign</span>
+            <span className="font-display text-[17px] font-bold tracking-tight">Dojang <span className="font-sans text-[13px] font-medium text-mint">도장</span></span>
           </a>
           <nav className="ml-4 hidden items-center gap-0.5 lg:flex">
             {NAV.map((n) => (
@@ -153,7 +153,7 @@ export default function App() {
 
       <footer className="border-t border-line/60">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-5 py-8 text-[12.5px] text-dim sm:px-8">
-          <span>Countersign · HSK Chain Horizon Hackathon · Track 1 · unaudited prototype, tiny sizes</span>
+          <span>Dojang 도장 · HSK Chain Horizon Hackathon · Track 1 · unaudited prototype, tiny sizes</span>
           <span>{d.staticMode && d.config?.publishedAt ? `snapshot published ${ago(d.config.publishedAt)} · ` : ""}Vault Pour interaction inspired by Aakash Mehra’s Coffee Pour Menu</span>
         </div>
       </footer>

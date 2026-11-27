@@ -1,12 +1,12 @@
-# DoraHacks submission: Countersign
+# DoraHacks submission: Dojang 도장
 
 **Track:** 1 · AI Agent Trading · HSK Chain + HSKSwap
 **Repo:** https://github.com/Vendhan1512/Al-Trading-Automation
-**Live dashboard:** https://vendhan1512.github.io/Al-Trading-Automation/ <!-- confirm after Pages run -->
+**Live dashboard:** https://vendhan1512.github.io/Al-Trading-Automation/
 **Demo video:** _link_
 
 ## One line
-Countersign is the AI trader that can't trade alone. Claude proposes each trade, a 2-of-2 committee countersigns it, and a vault on HSK Chain checks every signature before any token moves.
+Dojang (도장, the Korean seal that makes a signature binding) is the AI trader that can't trade alone. Claude proposes each trade, a 2-of-2 committee countersigns it, and a vault on HSK Chain checks every signature before any token moves.
 
 ## Problem
 Most AI trading agents run on a single hot key. Three things can go wrong:

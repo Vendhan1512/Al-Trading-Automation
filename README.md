@@ -1,8 +1,10 @@
 <div align="center">
 
-# Countersign
+# Dojang 도장
 
 ### The AI trader that can't trade alone.
+
+*In Korea a contract isn't binding until it carries a **dojang**, the owner's seal. Here, no trade moves a token until it carries **two**.*
 
 **An autonomous AI trading agent for HSKSwap whose every trade needs a second and third signature, from an independent committee, checked by the vault on HSK Chain.**
 
@@ -26,7 +28,7 @@ Putting trading rules in a vault is the right first step: caps, slippage floors,
 
 Banks solved this decades ago with the **two-person rule**: the trader proposes, risk countersigns, and the books refuse anything unsigned.
 
-**Countersign puts the two-person rule on-chain.**
+**Dojang puts the two-person rule on-chain.**
 
 ```
    AI agent ──proposes──► Execution Guardian ──signs──► Risk Officer ──co-signs or vetoes──► CountersignVault ──► HSKSwap
@@ -95,7 +97,7 @@ It recovers both committee signers from the EIP-712 permit inside the transactio
 
 ## Why it's different
 
-| If this happens… | A guardrailed vault | **Countersign** |
+| If this happens… | A guardrailed vault | **Dojang** |
 |---|---|---|
 | The agent's key leaks | The attacker trades the full allowance within the caps | **Cannot trade at all.** The agent key alone fails `NotEnoughSignatures` |
 | The model is prompt-injected | Bad trades go through as long as they fit the caps | Two independent processes re-price it at the live quote; the Risk Officer runs **stricter limits** and can veto |
@@ -105,9 +107,9 @@ It recovers both committee signers from the EIP-712 permit inside the transactio
 | The operator edits the history afterwards | Off-chain logs can be rewritten | Every decision is hashed and **Merkle-anchored**; any one re-verifies against the chain |
 | The owner wants it safer *now* | A new config, a redeploy, or trust | Say it in Mission Control; the agent applies **stricter-only** changes via `tighten()`; looser ones need the owner's wallet |
 
-## What the track asks for, and where Countersign does it
+## What the track asks for, and where Dojang does it
 
-| Requirement | Countersign |
+| Requirement | Dojang |
 |---|---|
 | **Monitor markets & on-chain data** | Every 30 s: HSKSwap spot, 30-min TWAP, depth and price impact at size, pool flow, plus a reference median from HashKey Global, Gate, MEXC, Coinbase and the APRO oracle. A Data Reliability Engine rejects stale, crossed, wide or outlier books, and returns **WAIT** when no reliable reference exists |
 | **Identify signals & execute autonomously** | Three tiers: **A** cycle arbitrage, **B** spread reversion (HSKSwap vs the exchange median), **C** mean reversion with a **sworn prediction** (target, invalidation, probability; committed on-chain, graded later with a Brier score). The **Claude** strategist may take, shrink or skip a candidate, never enlarge it |
@@ -121,7 +123,7 @@ It recovers both committee signers from the EIP-712 permit inside the transactio
 The **[dashboard](https://vendhan1512.github.io/Al-Trading-Automation/)** is built to be played with, not just read:
 
 - **Vault Pour.** Your vault drawn as a glass jar filled with its live holdings. Drag through the scenes: deposit, a sealed trade, a stop-loss that converts the position, the breaker slamming the lid.
-- **Countersign Stage.** An envelope travels from the agent to the Guardian to the Risk Officer to the vault, collecting wax seals, or gets knocked off with the vault's real revert.
+- **Seal Stage.** An envelope travels from the agent to the Guardian to the Risk Officer to the vault, collecting wax seals, or gets knocked off with the vault's real revert.
 - **Break-It Arena.** The 15 live attacks above, as projectiles hitting the vault.
 - **Decision heartbeat.** Every tick the agent journals, with WAIT streaks grouped and every Guardian check one click away.
 - **Markets and arbitrage radar.** Live gaps against the exchange median, with hover history.
@@ -191,7 +193,8 @@ The replay found a real flaw: the first Guardian assumed the whole gap would clo
 
 ## Deployments
 
-**HSK Chain mainnet (177)**
+**HSK Chain mainnet (177).** The contracts keep their technical name, `CountersignVault`, and every permit is signed under the EIP-712 domain `"Countersign"`. Dojang is the product built on them.
+
 
 | Contract | Address | Verification |
 |---|---|---|
@@ -219,7 +222,7 @@ pnpm --filter @countersign/agent risk         # terminal 2: Risk Officer (RISK_O
 pnpm --filter @countersign/agent agent        # terminal 3: agent (AGENT_PK), dashboard at http://localhost:8787
 ```
 
-`AGENT_MODE=live` and `VAULT=0x…` turn on trading; without them the agent runs the full loop in **shadow mode** and never sends a transaction. Owners create vaults, deposit, pause, revoke and withdraw from `tools/owner-console/` in their own wallet. Countersign never sees the owner's key.
+`AGENT_MODE=live` and `VAULT=0x…` turn on trading; without them the agent runs the full loop in **shadow mode** and never sends a transaction. Owners create vaults, deposit, pause, revoke and withdraw from `tools/owner-console/` in their own wallet. Dojang never sees the owner's key.
 
 ## Architecture
 
@@ -250,7 +253,7 @@ research/    venue measurements and the 30-day backtest
 
 <div align="center">
 
-**The AI proposes. The committee countersigns. The vault decides.**
+**The AI proposes. Two seals countersign. The vault decides.**
 
 Built with [Claude Code](https://claude.com/claude-code) · Dashboard's Vault Pour interaction inspired by Aakash Mehra's Coffee Pour Menu
 
