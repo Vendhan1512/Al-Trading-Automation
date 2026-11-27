@@ -52,6 +52,7 @@ Real money, a real vault, real HSKSwap pools: all verifiable on [Blockscout](htt
 | 📈 | The keeper records the NAV high-water mark for the drawdown breaker | [`0x896f6901…879e`](https://hsk.blockscout.com/tx/0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e) |
 | ✍️ | **First countersigned trade.** The owner says *"rebalance 50% to USDT"*; the agent proposes it; the **Guardian and the Risk Officer both sign**; the vault executes 38 WHSK → **3.0188 USDT** (committee floor 3.0112) | [`0x6e02064a…4584`](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584) |
 | 💬 | **Plain words → on-chain rule.** The owner types *"stop for the day after losing 0.5 USDT"* in Mission Control and signs in; the agent applies it with `tighten()` and the vault now enforces a 0.5 USDT daily loss stop (was 1.0). The agent can only tighten, never loosen | [`0x39007191…88b1`](https://hsk.blockscout.com/tx/0x390071919bf2531efa5853266648ad24f847d0902cc0747efb7a3796d1a288b1) |
+| 🎯 | **Autonomous exits armed.** The owner types *"take profit 0.5% and stop loss 0.5%"*; the agent tightens the vault (stop-loss 3% → 0.5%, take-profit off → 0.5%). When the pool's 30-minute TWAP crosses either line, the keeper fires the permissionless `stopOut()` and the vault sells on its own: no human, no click | [`0x1e9dd75b…b597`](https://hsk.blockscout.com/tx/0x1e9dd75b4b6d6edce43b7b33181e3347e3ba07aff0eecdfd56e7bce97e2eb597) |
 | 🛡️ | **15 attacks** fired at the live vault (stolen agent key, forged committee, route swap, drain, takeover…): **15/15 blocked** by the contract's own reverts | [run them yourself](https://vendhan1512.github.io/Al-Trading-Automation/?run=1#break) |
 
 ## Verify it yourself in 3 minutes
@@ -246,7 +247,7 @@ research/    venue measurements and the 30-day backtest
 ## Honest limits
 
 - **Unaudited hackathon code.** Mainnet sizes are deliberately tiny (the vault holds about $6).
-- **The mainnet trade was requested by the owner.** At this size, the committee has so far refused every autonomous entry because it can't pay its own gas (about $0.0125 per swap at 500 gwei). That is the rule working as designed, and every refusal is in the anchored journal.
+- **The countersigned mainnet trade was requested by the owner.** Autonomous TWAP exits are armed at ±0.5% and fire when the pool moves; the pool is thin and can stay flat for days. At this size, the committee has so far refused every autonomous entry because it can't pay its own gas (about $0.0125 per swap at 500 gwei). That is the rule working as designed, and every refusal is in the anchored journal.
 - In this deployment the three keys run as separate processes on one machine. In production the committee belongs in HSMs or with independent operators; the owner can rotate it at any time.
 - HSKSwap's liquidity is a star around USDT, so on-chain cycle arbitrage (Tier A) is dormant, and spread trades (Tier B) carry price risk between entry and exit.
 - **We claim no profit.** We claim the AI cannot act alone, and that every claim it makes is committed and checkable.

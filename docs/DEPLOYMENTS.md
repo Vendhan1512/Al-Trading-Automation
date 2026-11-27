@@ -81,6 +81,7 @@ Owner then deposited **75 HSK as WHSK** (vault: 76 WHSK ≈ 6.04 USDT cost basis
 |---|---|
 | Keeper records the NAV high-water mark (`checkBreaker`) | [`0x896f6901…879e`](https://hsk.blockscout.com/tx/0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e) |
 | Anchor #0: decisions 0–474 committed as one Merkle root | [`0x9ad3ce93…dea7`](https://hsk.blockscout.com/tx/0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7) |
+| **Autonomous exits armed from chat**: "take profit 0.5% and stop loss 0.5%" → agent `tighten()` (stop-loss 300 → 50 bps, take-profit 0 → 50 bps); the keeper fires `stopOut()` when the 30-min TWAP crosses either line | [`0x1e9dd75b…b597`](https://hsk.blockscout.com/tx/0x1e9dd75b4b6d6edce43b7b33181e3347e3ba07aff0eecdfd56e7bce97e2eb597) |
 | **Chat rule, enforced on-chain**: owner typed "stop for the day after losing 0.5 USDT" in Mission Control; the agent applied it with `tighten()` (daily loss stop 1.0 → 0.5 USDT) | [`0x39007191…88b1`](https://hsk.blockscout.com/tx/0x390071919bf2531efa5853266648ad24f847d0902cc0747efb7a3796d1a288b1) |
 | **First countersigned trade**: owner asked "Rebalance 50% to USDT"; agent proposed an EXIT, Guardian + Risk Officer both signed; 38 WHSK → 3.018754 USDT (minOut 3.011207) | [`0x6e02064a…4584`](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584) |
 

@@ -21,7 +21,7 @@ function liveScene(pf: Portfolio | null): PourScene {
     id: "live",
     name: "Your vault, live",
     subtitle: pf ? `${usd(pf.totalValueUsdt, 2)} · ${pf.positions.map((p) => `${p.qty} ${p.asset}`).join(" + ") || "empty"}${pf.usdt ? ` + ${pf.usdt.toFixed(2)} USDT` : ""}` : "reading the chain…",
-    caption: pf ? `Real holdings of vault ${pf.vault?.slice(0, 6)}…, valued at the pool's 30-minute average. ${pf.mandate.stopLossBps ? `The stop-loss is armed at ${(pf.mandate.stopLossBps / 100).toFixed(0)}% below cost.` : ""}` : "Loading the vault from HashKey Chain…",
+    caption: pf ? `Real holdings of vault ${pf.vault?.slice(0, 6)}…, valued at the pool's 30-minute average. ${pf.mandate.stopLossBps ? `Armed exits, permissionless: stop-loss ${+(pf.mandate.stopLossBps / 100).toFixed(2)}% below cost${pf.mandate.takeProfitBps ? `, take-profit ${+(pf.mandate.takeProfitBps / 100).toFixed(2)}% above` : ""}.` : ""}` : "Loading the vault from HashKey Chain…",
     layers,
     pricePct: pos ? pos.unrealizedPct : 0,
   };
