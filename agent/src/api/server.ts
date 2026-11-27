@@ -67,7 +67,11 @@ const portfolio = async () => {
       tiersMask: m.tiersMask,
       assetsMask: m.assetsMask,
       expiry: Number(m.expiry),
+      stopLossBps: m.stopLossBps ?? 0,
+      takeProfitBps: m.takeProfitBps ?? 0,
+      maxDrawdownBps: m.maxDrawdownBps ?? 0,
     },
+    committee: { guardians: v.guardians, threshold: v.threshold },
     positions: positions.map((p) => ({ ...p, qtyRaw: p.qtyRaw.toString() })),
   };
 };
@@ -169,8 +173,10 @@ routes["/api/config"] = (_q, res) =>
     chainId: chain?.net.chainId ?? 177,
     explorer: chain?.net.explorer ?? "https://hsk.blockscout.com",
     vault: chain?.vault ?? null,
+    v2Vault: chain?.vault ?? null, // this agent only drives v2 (committee) vaults
     agent: process.env.AGENT ?? null,
     guardian: process.env.GUARDIAN ?? null,
+    riskOfficer: process.env.RISK_OFFICER ?? null,
     owner: process.env.OWNER ?? null,
     contracts: { vaultImplementation: "0x0728B021D518a916edC1dc7689d6fBD23d601098", vaultFactory: chain?.net.vaultFactory ?? null, router: chain?.net.router ?? null },
     mode: process.env.AGENT_MODE ?? "shadow",
@@ -213,8 +219,9 @@ const limited = (ip: string) => {
   return h.length > 30;
 };
 
-const WEB_ROOT = resolve(process.env.WEB_ROOT ?? "../web");
-const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json" };
+// The React dashboard (ui/dist) when built, else the dependency-free fallback in web/.
+const WEB_ROOT = resolve(process.env.WEB_ROOT ?? (existsSync(resolve("../ui/dist/index.html")) ? "../ui/dist" : "../web"));
+const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".woff2": "font/woff2" };
 const serveStatic = (res: ServerResponse, pathname: string) => {
   const rel = pathname === "/" ? "/index.html" : pathname;
   const file = normalize(join(WEB_ROOT, rel));

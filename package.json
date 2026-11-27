@@ -4,6 +4,8 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "ui": "pnpm --filter @countersign/ui dev",
+    "ui:build": "pnpm --filter @countersign/ui build"
   }
 }

@@ -43,9 +43,11 @@ jobs:
           AGENT_MODE: ${{ vars.AGENT_MODE || 'shadow' }}
         run: pnpm exec tsx src/cli/publish-site.ts --market-only
         continue-on-error: true
+      - name: Build the dashboard (React) with the fresh snapshot
+        run: pnpm --filter @countersign/ui build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: web
+          path: ui/dist
       - id: deployment
         uses: actions/deploy-pages@v4
