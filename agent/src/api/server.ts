@@ -13,7 +13,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { chat, proposeMandateChange, whatIf, type CopilotCtx } from "../copilot/copilot.js";
 import { applyMandate, sessionMessage, verifyOwner } from "../copilot/owner.js";
 import { enqueueOwnerRequest, listOwnerRequests } from "../modules/owner/requests.js";
-import { buildRecord } from "../modules/evidence/record.js";
+import { buildRecord, recordOpts } from "../modules/evidence/record.js";
 import type { GuardianClient } from "../modules/execution/guardian-client.js";
 import type { ChainOps } from "../modules/transactions/tx-manager.js";
 
@@ -190,7 +190,12 @@ routes["/api/owner/message"] = (_q, res, url) => {
   send(res, 200, { issuedAt, message: sessionMessage(chain.vault, chain.net.chainId, issuedAt) });
 };
 
-routes["/api/record"] = (_q, res) => send(res, 200, buildRecord(store));
+routes["/api/record"] = async (_q, res) => {
+  const p = await portfolio().catch(() => null);
+  const health = store.latest()?.health;
+  const spot = (a: string) => health?.assets.find((x) => x.asset === a)?.dexSpot ?? null;
+  send(res, 200, buildRecord(store, Date.now(), recordOpts(chain?.net.pools ?? MAINNET.pools, p && p.mode === "onchain" ? { totalUsdt: p.totalValueUsdt, spot } : null)));
+};
 routes["/api/owner/requests"] = (_q, res) => send(res, 200, { requests: listOwnerRequests() });
 
 // ---------------- POST routes (copilot / what-if / mandate). Rate-limited; never move funds.

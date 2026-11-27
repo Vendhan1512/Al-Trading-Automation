@@ -35,4 +35,24 @@ describe("track record + refusal ledger", () => {
     expect(r.byAsset.find((a) => a.asset === "WHSK")).toMatchObject({ proposed: 4, refused: 2, executed: 1 });
     expect(r.recentRefusals[0]!.asset).toBe("WHSK"); // newest first
   });
+
+  it("groups repeated refusals into one opportunity and leaves it pending until its horizon ends", () => {
+    const s = new Store(":memory:");
+    const cand = (createdAt: number) => ({ asset: "WBTC", side: "BUY", entry: 59_000, horizonSec: 21_600, maxSizeUsdt: 3, createdAt });
+    const now = 1_800_000_000_000;
+    for (const at of [now - 60_000, now - 30_000, now]) dec(s, "candidate", "WBTC", "REJECT", { candidate: cand(at), guardian: { decision: "REJECT", reasons: ["expected-net-value (-0.02 vs 0)"] } });
+    dec(s, "candidate", "WBTC", "REJECT", { candidate: cand(now + 20 * 60_000), guardian: { decision: "REJECT", reasons: ["x"] } }); // 20 min later: a new opportunity
+    const r = buildRecord(s, now + 21 * 60_000);
+    expect(r.counterfactual).toMatchObject({ graded: 0, pending: 2, pnlAfterCostsUsdt: 0 });
+    expect(r.counterfactual.items.map((i) => i.refusals)).toEqual([1, 3]);
+  });
+
+  it("compares the vault with holding what was deposited, adding back sold inventory at today's price", () => {
+    const s = new Store(":memory:");
+    s.recordTrade({ tradeId: "0x1", at: 1, asset: "WHSK", side: "SELL", tier: "EXIT", amountIn: (38n * 10n ** 18n).toString(), amountOut: "3018754", realizedPnl: "0", expectedNet: "0", gasUsed: "0", gasPrice: "0", txHash: "0xabc", block: 1, predictionHash: null });
+    const r = buildRecord(s, Date.now(), { vault: { totalUsdt: 6.0, spot: () => 0.08 } });
+    // hold = 6.0 + 38*0.08 - 3.018754 = 6.021246
+    expect(r.vsHold!.holdUsdt).toBeCloseTo(6.021246, 6);
+    expect(r.vsHold!.diffUsdt).toBeCloseTo(-0.021246, 6);
+  });
 });

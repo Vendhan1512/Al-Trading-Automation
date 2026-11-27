@@ -55,8 +55,8 @@ export function Hero({ portfolio, decisions }: { portfolio: Portfolio | null; de
             <a href="#break"><Button size="lg"><Swords className="size-4" /> Try to break it</Button></a>
             <a href="#how"><Button size="lg" variant="ghost">Watch a trade <ArrowDown className="size-4" /></Button></a>
           </motion.div>
-          <motion.dl initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="mt-10 grid max-w-lg grid-cols-3 gap-4 border-t border-line/70 pt-6">
-            {[["2-of-2", "committee on every trade"], ["15/15", "attacks blocked on mainnet"], [String(decisions || "—"), "decisions journaled"]].map(([n, l]) => (
+          <motion.dl initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="mt-10 grid max-w-xl grid-cols-2 gap-4 border-t border-line/70 pt-6 sm:grid-cols-4">
+            {[["2-of-2", "committee on every trade"], ["15/15", "attacks blocked on mainnet"], ["−91%", "losses vs rules alone (30-day backtest)"], [String(decisions || "—"), "decisions journaled"]].map(([n, l]) => (
               <div key={l}>
                 <dt className="sr-only">{l}</dt>
                 <dd className="font-display text-[26px] font-bold tracking-tight text-fog">{n}</dd>

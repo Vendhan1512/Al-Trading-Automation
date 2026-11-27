@@ -14,7 +14,58 @@ type TrackRecord = {
   byAsset: { asset: string; proposed: number; refused: number; executed: number }[];
   recentRefusals: { seq: number; at: number; asset: string | null; summary: string; hash: string }[];
   trades: { tradeId: string; at: number; asset: string; side: string; tier: string; amountIn: string; amountOut: string; realizedPnl: string; txHash: string; block: number }[];
+  counterfactual?: {
+    graded: number; pending: number; wouldHaveLost: number; pnlAfterCostsUsdt: number; pnlBeforeGasUsdt: number;
+    items: { asset: string; at: number; sizeUsdt: number; entry: number; exit: number | null; horizonSec: number; pnlUsdt: number | null; refusals: number }[];
+  };
+  vsHold?: { actualUsdt: number; holdUsdt: number; diffUsdt: number; diffPct: number } | null;
 };
+
+const until = (t: number) => {
+  const m = Math.max(0, (t - Date.now()) / 60_000);
+  return m < 1 ? "now" : m < 60 ? `in ${m.toFixed(0)}m` : `in ${(m / 60).toFixed(1)}h`;
+};
+
+function Counterfactual({ cf, vsHold }: { cf: NonNullable<TrackRecord["counterfactual"]>; vsHold?: TrackRecord["vsHold"] }) {
+  const saved = -cf.pnlAfterCostsUsdt;
+  const right = cf.graded ? Math.round((cf.wouldHaveLost / cf.graded) * 100) : null;
+  return (
+    <div className="rounded-3xl border border-line/80 bg-panel/70 p-5">
+      <div className="font-display text-lg font-semibold">Were the refusals right?</div>
+      <p className="mt-1 text-[13px] text-mist">Counterfactual grading: for every opportunity the committee refused, we buy at the proposal's own entry price and sell at the pool price when its own horizon ends, after both pool fees and gas both ways. Repeated refusals of the same gap count once.</p>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl bg-ink-2/70 py-3">
+          <div className="tnum font-display text-2xl font-semibold text-mint">{right === null ? "—" : `${right}%`}</div>
+          <div className="font-mono text-[10.5px] text-dim">refusals that were right</div>
+        </div>
+        <div className="rounded-xl bg-ink-2/70 py-3">
+          <div className={cn("tnum font-display text-2xl font-semibold", saved >= 0 ? "text-mint" : "text-coral")}>{cf.graded ? `${saved >= 0 ? "+" : "−"}$${Math.abs(saved).toFixed(4)}` : "—"}</div>
+          <div className="font-mono text-[10.5px] text-dim">{saved >= 0 ? "loss avoided" : "profit missed"} ({cf.graded} graded)</div>
+        </div>
+        <div className="rounded-xl bg-ink-2/70 py-3">
+          <div className="tnum font-display text-2xl font-semibold">{cf.pending}</div>
+          <div className="font-mono text-[10.5px] text-dim">waiting for their horizon</div>
+        </div>
+      </div>
+      <ol className="mt-3 space-y-1.5">
+        {cf.items.slice(0, 5).map((i) => (
+          <li key={`${i.asset}-${i.at}`} className="flex items-center justify-between gap-2 rounded-lg bg-ink-2/50 px-3 py-1.5 font-mono text-[11.5px]">
+            <span className="text-mist">{i.asset} · buy {i.sizeUsdt.toFixed(2)} USDT @ {i.entry.toPrecision(5)} <span className="text-dim">({i.refusals}× refused)</span></span>
+            <span className={i.pnlUsdt === null ? "text-dim" : i.pnlUsdt < 0 ? "text-mint" : "text-coral"}>
+              {i.pnlUsdt === null ? `grades ${until(i.at + i.horizonSec * 1000)}` : `${i.pnlUsdt < 0 ? "would lose" : "would make"} $${Math.abs(i.pnlUsdt).toFixed(4)}`}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {vsHold && (
+        <div className="mt-4 rounded-xl border border-line/70 px-3 py-2.5 text-[12.5px] text-mist">
+          <b className="text-fog">Vault vs simply holding the deposit:</b> ${vsHold.actualUsdt.toFixed(4)} vs ${vsHold.holdUsdt.toFixed(4)} →{" "}
+          <span className={vsHold.diffUsdt >= 0 ? "text-mint" : "text-coral"}>{vsHold.diffUsdt >= 0 ? "+" : "−"}${Math.abs(vsHold.diffUsdt).toFixed(4)} ({vsHold.diffPct.toFixed(2)}%)</span>. We claim no profit; this is reported either way.
+        </div>
+      )}
+    </div>
+  );
+}
 
 const PARTY_COL: Record<Party, string> = { "Execution Guardian": "#3dd6a3", "Risk Officer": "#a78bfa", "Strategy filter": "#6cb4ff", Strategist: "#f2a541" };
 const PLAIN: Record<string, string> = {
@@ -166,6 +217,8 @@ export function TrackRecordSection() {
           )}
         </div>
 
+        <div className="space-y-6">
+        {r.counterfactual && <Counterfactual cf={r.counterfactual} vsHold={r.vsHold} />}
         <div className="rounded-3xl border border-line/80 bg-ink-2/70 p-5">
           <div className="font-display text-lg font-semibold">Latest refusals</div>
           <ol className="mt-3 space-y-2.5">
@@ -179,6 +232,7 @@ export function TrackRecordSection() {
               </li>
             ))}
           </ol>
+        </div>
         </div>
       </div>
     </div>

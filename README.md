@@ -11,7 +11,7 @@
 [![HSK Chain mainnet](https://img.shields.io/badge/HSK%20Chain-mainnet%20live-3dd6a3)](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030)
 [![verify trade](https://img.shields.io/badge/verify%20trade-14%2F14-3dd6a3)](#verify-it-yourself-in-3-minutes)
 [![attacks](https://img.shields.io/badge/mainnet%20attacks%20blocked-15%2F15-3dd6a3)](#verify-it-yourself-in-3-minutes)
-[![tests](https://img.shields.io/badge/tests-219%20passing-6cb4ff)](#tested)
+[![tests](https://img.shields.io/badge/tests-221%20passing-6cb4ff)](#tested)
 [![contracts](https://img.shields.io/badge/contracts-Sourcify%20exact%20%2B%20Blockscout-6cb4ff)](#deployments)
 
 **[Live dashboard](https://vendhan1512.github.io/Al-Trading-Automation/)** · **[Try to break it](https://vendhan1512.github.io/Al-Trading-Automation/?run=1#break)** · **[The mainnet trade](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584)** · **[Deployments](docs/DEPLOYMENTS.md)**
@@ -128,7 +128,7 @@ The **[dashboard](https://vendhan1512.github.io/Al-Trading-Automation/)** is bui
 - **Break-It Arena.** The 15 live attacks above, as projectiles hitting the vault.
 - **Decision heartbeat.** Every tick the agent journals, with WAIT streaks grouped and every Guardian check one click away.
 - **Markets and arbitrage radar.** Live gaps against the exchange median, with hover history.
-- **Track record and refusal ledger.** The funnel from market ticks to proposals to refusals to executions, and, for every proposal the committee turned down, **who refused it and which check failed** (live: 59 AI proposals, 55 refused by the Execution Guardian, mostly because a 3 USDT trade can't pay its own gas). Every executed trade has a one-click *verify*.
+- **Track record and refusal ledger.** The funnel from market ticks to proposals to refusals to executions, and, for every proposal the committee turned down, **who refused it and which check failed** (live: 59 AI proposals, 55 refused by the Execution Guardian, mostly because a 3 USDT trade can't pay its own gas). Every executed trade has a one-click *verify*. **Were the refusals right?** Each refused opportunity is graded counterfactually: bought at its own entry, sold when its own horizon ends, after both fees and gas. The vault is also compared with simply holding the deposit (currently −0.17%, the cost of the owner's rebalance; reported either way).
 - **Verify any trade.** The 14 checks of `pnpm verify trade`, run from your browser: it recovers the committee signers from the EIP-712 permit and checks them against the vault at the block before. No wallet, no server of ours.
 - **Mission Control.** Chat with the agent; sign in with your wallet (a signature only, no gas) to apply changes or request a rebalance.
 
@@ -160,10 +160,10 @@ sequenceDiagram
 
 ## Tested
 
-**219 tests**, all passing:
+**221 tests**, all passing:
 
 - **101 contract tests** (Foundry): unit tests, v2 committee tests, invariants with a liveness check, and **8 against the real HSKSwap pools on a mainnet fork** (TWAP stop vs one-block wick, TWAP floor vs a worthless `minOut`, breaker, re-entry lockout).
-- **118 agent tests** (Vitest): reliability engine, candidates, Guardian and Risk Officer, transaction-manager recovery, copilot, owner sessions and requests, Merkle evidence, track record.
+- **120 agent tests** (Vitest): reliability engine, candidates, Guardian and Risk Officer, transaction-manager recovery, copilot, owner sessions and requests, Merkle evidence, track record.
 
 Every scenario from the design document has a named test:
 
@@ -215,7 +215,7 @@ Every address and transaction: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md). The v
 ```bash
 pnpm install
 cd contracts && forge test && cd ..           # 101 contract tests (fork tests need network access)
-pnpm --filter @countersign/agent test         # 118 agent tests
+pnpm --filter @countersign/agent test         # 120 agent tests
 
 # three processes, three keys — each refuses to start if it can see another role's key
 pnpm --filter @countersign/agent guardian     # terminal 1: Execution Guardian (GUARDIAN_PK)
