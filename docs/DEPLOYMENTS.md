@@ -67,6 +67,13 @@ Testnet pool prices are not real prices. This run proves the mechanics, not prof
 | Deploy v2 implementation | [`0x49d207b0…bcf3c`](https://hsk.blockscout.com/tx/0x49d207b08df8e12d33df115621b102c43e78c695a6288bf393556a76172fdc5c) | 30,684,094 | 5,003,266 |
 | Deploy v2 factory | [`0x119e1a63…cf3c`](https://hsk.blockscout.com/tx/0x119e1a6366a7cb58dd3e2d3ab46a68c7c0aa7f166eec118f865c23030f9bcf3c) | 30,684,096 | 692,460 |
 
+### Owner's v2 mainnet vault (live) — created 27 Nov 2026
+[`0x5c13500A4aD4277a13C7d774a78Cfd267A202030`](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030). The owner wallet `0x5bb8…4208` created it through the Owner Console in tx [`0x50e4f0c4…0100`](https://hsk.blockscout.com/tx/0x50e4f0c427e15efe34ffab430705d186f50b5301354dfebecec97b846d560100).
+Agent `0x1709…bEA7`; committee Execution Guardian `0xE278…ac5D` + Risk Officer `0x2697…6E29`, **threshold 2-of-2**.
+
+**Try to break it, mainnet (27 Nov 2026): 15/15 blocked**, each by `eth_call` against this vault:
+`InvalidPermit` (stolen agent key) · `NotEnoughSignatures(0, 2)` (no countersignature) · `InvalidPermit` (forged committee) · `NotAgent` (outsider; guardian submitting) · `PolicyMismatch` (old policy) · `PermitExpired` · `PathMismatch` (route swap) · `NotOwner` (withdraw, rewrite mandate, replace committee, take ownership, guardian unpause) · `NotTighter` (loosen cap 10×) · fake stop-loss refused.
+
 ## HSK mainnet (chain 177), v1 — deployed 23 Nov 2026 (superseded, kept for the record)
 | Contract | Address | Verification |
 |---|---|---|

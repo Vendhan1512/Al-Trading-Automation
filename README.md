@@ -35,6 +35,7 @@ AI proposes ─► Execution Guardian prices it ─► Risk Officer re-checks it
 | Owner vault (v1) | [`0x76fB…9eE0`](https://hsk.blockscout.com/address/0x76fB3ae6c48964171a297C88a16513284CfB9eE0) | created by the owner's wallet |
 | **CountersignVault v2 implementation** | [`0x0728…1098`](https://hsk.blockscout.com/address/0x0728B021D518a916edC1dc7689d6fBD23d601098) | committee + permissionless stops · Sourcify exact + Blockscout full match |
 | **VaultFactory v2** | [`0x564a…6af4`](https://hsk.blockscout.com/address/0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4) | Sourcify exact + Blockscout full match |
+| **Owner vault v2 (live)** | [`0x5c13…2030`](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030) | 2-of-2 committee · **15/15 attacks blocked on mainnet** |
 
 ### HSK Chain testnet (133), v2
 | Contract | Address |

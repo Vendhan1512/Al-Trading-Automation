@@ -35,7 +35,7 @@ jobs:
       - name: Refresh market + arbitrage snapshot (read-only)
         working-directory: agent
         env:
-          VAULT: ${{ vars.VAULT || '0x76fB3ae6c48964171a297C88a16513284CfB9eE0' }}
+          VAULT: ${{ vars.VAULT || '0x5c13500A4aD4277a13C7d774a78Cfd267A202030' }}
           AGENT: "0x170912F2F8beb252902e9b07F63851B2e284bEA7"
           GUARDIAN: "0xE278AC403F93b05cad73f6C3C4D0B9E5667fac5D"
           RISK_OFFICER: "0x2697e6bbac5959F66bAf916Ac024aF045ec16E29"

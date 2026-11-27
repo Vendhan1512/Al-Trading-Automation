@@ -31,7 +31,7 @@ Most AI trading agents run on a single hot key. Three things can go wrong:
 |---|---|
 | CountersignVault v2 | `0x0728B021D518a916edC1dc7689d6fBD23d601098` (Sourcify exact + Blockscout full) |
 | VaultFactory v2 | `0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4` (Sourcify exact + Blockscout full) |
-| Owner's 2-of-2 vault | _filled after creation_ |
+| Owner's 2-of-2 vault | `0x5c13500A4aD4277a13C7d774a78Cfd267A202030` (15/15 attacks blocked on mainnet) |
 | First countersigned trade | _tx_ |
 | Decision anchor | _tx_ |
 
