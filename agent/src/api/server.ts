@@ -13,6 +13,7 @@ import { extname, join, normalize, resolve } from "node:path";
 import { chat, proposeMandateChange, whatIf, type CopilotCtx } from "../copilot/copilot.js";
 import { applyMandate, sessionMessage, verifyOwner } from "../copilot/owner.js";
 import { enqueueOwnerRequest, listOwnerRequests } from "../modules/owner/requests.js";
+import { buildRecord } from "../modules/evidence/record.js";
 import type { GuardianClient } from "../modules/execution/guardian-client.js";
 import type { ChainOps } from "../modules/transactions/tx-manager.js";
 
@@ -189,6 +190,7 @@ routes["/api/owner/message"] = (_q, res, url) => {
   send(res, 200, { issuedAt, message: sessionMessage(chain.vault, chain.net.chainId, issuedAt) });
 };
 
+routes["/api/record"] = (_q, res) => send(res, 200, buildRecord(store));
 routes["/api/owner/requests"] = (_q, res) => send(res, 200, { requests: listOwnerRequests() });
 
 // ---------------- POST routes (copilot / what-if / mandate). Rate-limited; never move funds.

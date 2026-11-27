@@ -282,6 +282,15 @@ export class Store {
     return (this.db.prepare("SELECT * FROM anchors WHERE local_from <= ? AND local_to >= ?").get(seq, seq) as never) ?? null;
   }
 
+  allAnchors(): { idx: number; local_from: number; local_to: number; onchain_from: number; root: string; tx: string }[] {
+    return this.db.prepare("SELECT * FROM anchors ORDER BY idx").all() as never;
+  }
+
+  /** Every journal row, oldest first (track record + refusal ledger). */
+  allDecisions(): { seq: number; at: number; kind: string; asset: string | null; outcome: string; summary: string; payload: string; hash: string }[] {
+    return this.db.prepare("SELECT seq, at, kind, asset, outcome, summary, payload, hash FROM decisions ORDER BY seq").all() as never;
+  }
+
   recordAnchor(a: { idx: number; localFrom: number; localTo: number; onchainFrom: number; root: string; tx: string }) {
     this.db.prepare("INSERT INTO anchors (idx, local_from, local_to, onchain_from, root, tx, at) VALUES (?, ?, ?, ?, ?, ?, ?)").run(a.idx, a.localFrom, a.localTo, a.onchainFrom, a.root, a.tx, Date.now());
   }

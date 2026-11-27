@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { buildRecord } from "../modules/evidence/record.js";
 import { join, resolve } from "node:path";
 import type { Address } from "viem";
 import { MAINNET } from "../config.js";
@@ -84,6 +85,7 @@ if (store) {
   for (const a of ["WHSK", "WETH", "WBTC"]) json(`history-${a}`, { asset: a, points: store.history(a, 240) });
   json("transactions", { transactions: store.txRecent(100).map(({ payload: _p, ...t }) => t) });
   json("trades", { trades: store.trades() });
+  json("record", buildRecord(store));
   json("predictions", { predictions: preds.map(({ payload: _p, ...x }) => x) });
 } else {
   // keep previously published journal files; only create empty ones if none exist yet

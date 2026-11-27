@@ -9,6 +9,8 @@ import { Markets } from "@/components/markets";
 import { DecisionRiver } from "@/components/decision-river";
 import { MissionControl } from "@/components/mission-control";
 import { Evidence } from "@/components/evidence";
+import { Verifier } from "@/components/verifier";
+import { TrackRecordSection } from "@/components/track-record";
 import { Pill } from "@/components/ui/badge";
 import { ago, bps } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -19,6 +21,8 @@ const NAV = [
   { id: "markets", label: "Markets" },
   { id: "decisions", label: "Decisions" },
   { id: "mission", label: "Mission Control" },
+  { id: "record", label: "Track record" },
+  { id: "verify", label: "Verify" },
   { id: "evidence", label: "Evidence" },
 ];
 
@@ -132,6 +136,14 @@ export default function App() {
 
         <Section id="mission" eyebrow="Mission Control" title="Tell it how to trade, in plain words." lede="Ask about P&L, ask what-if, or set size, frequency, assets and stop-loss. It proposes a diff; stricter rules apply at once, looser ones need your wallet.">
           <MissionControl config={d.config} staticMode={d.staticMode} />
+        </Section>
+
+        <Section id="record" eyebrow="Track record" title="What it proposed. What the committee refused." lede="Graded from the agent's own journal, which is Merkle-anchored on HSK Chain. Refusals are first-class: for every trade the committee turned down you see who refused it and which check failed.">
+          <TrackRecordSection />
+        </Section>
+
+        <Section id="verify" eyebrow="Don’t trust our CLI either" title="Verify any trade, right here." lede="The same 14 checks as pnpm verify trade, run from your browser against HSK Chain: who signed, whether they were on the committee, whether the vault’s rules held at that block.">
+          <Verifier />
         </Section>
 
         <Section id="evidence" eyebrow="Evidence" title="Don’t take our word for it." lede="Verified contracts, real transactions and a verifier that re-derives any trade from the chain.">

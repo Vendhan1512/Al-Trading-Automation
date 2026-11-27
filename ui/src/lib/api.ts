@@ -10,7 +10,7 @@ function snapshotPath(p: string): string | null {
   const q = u.searchParams;
   const m: Record<string, string> = {
     "/api/config": "config", "/api/portfolio": "portfolio", "/api/market/prices": "prices", "/api/strategies/health": "health",
-    "/api/agent/decisions": "decisions", "/api/arbitrage": "arbitrage", "/api/transactions": "transactions", "/api/trades": "trades", "/api/predictions": "predictions",
+    "/api/agent/decisions": "decisions", "/api/arbitrage": "arbitrage", "/api/transactions": "transactions", "/api/trades": "trades", "/api/predictions": "predictions", "/api/record": "record",
   };
   if (m[u.pathname]) return `data/${m[u.pathname]}.json`;
   if (u.pathname === "/api/market/history") return `data/history-${q.get("asset")}.json`;
@@ -60,4 +60,5 @@ export const endpoints = {
   transactions: () => api<Transactions>("/api/transactions"),
   trades: () => api<Trades>("/api/trades"),
   predictions: () => api<Predictions>("/api/predictions"),
+  record: <T,>() => api<T>("/api/record"),
 };

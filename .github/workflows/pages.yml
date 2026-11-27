@@ -40,7 +40,7 @@ jobs:
           GUARDIAN: "0xE278AC403F93b05cad73f6C3C4D0B9E5667fac5D"
           RISK_OFFICER: "0x2697e6bbac5959F66bAf916Ac024aF045ec16E29"
           OWNER: "0x5bb83E60a7a05A0e1b077B66412a26306e334208"
-          AGENT_MODE: ${{ vars.AGENT_MODE || 'shadow' }}
+          AGENT_MODE: ${{ vars.AGENT_MODE || 'live' }}
         run: pnpm exec tsx src/cli/publish-site.ts --market-only
         continue-on-error: true
       - name: Build the dashboard (React) with the fresh snapshot

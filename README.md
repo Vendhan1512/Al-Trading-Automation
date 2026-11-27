@@ -9,7 +9,7 @@
 [![HSK Chain mainnet](https://img.shields.io/badge/HSK%20Chain-mainnet%20live-3dd6a3)](https://hsk.blockscout.com/address/0x5c13500A4aD4277a13C7d774a78Cfd267A202030)
 [![verify trade](https://img.shields.io/badge/verify%20trade-14%2F14-3dd6a3)](#verify-it-yourself-in-3-minutes)
 [![attacks](https://img.shields.io/badge/mainnet%20attacks%20blocked-15%2F15-3dd6a3)](#verify-it-yourself-in-3-minutes)
-[![tests](https://img.shields.io/badge/tests-217%20passing-6cb4ff)](#tested)
+[![tests](https://img.shields.io/badge/tests-219%20passing-6cb4ff)](#tested)
 [![contracts](https://img.shields.io/badge/contracts-Sourcify%20exact%20%2B%20Blockscout-6cb4ff)](#deployments)
 
 **[Live dashboard](https://vendhan1512.github.io/Al-Trading-Automation/)** · **[Try to break it](https://vendhan1512.github.io/Al-Trading-Automation/?run=1#break)** · **[The mainnet trade](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584)** · **[Deployments](docs/DEPLOYMENTS.md)**
@@ -46,7 +46,7 @@ Real money, a real vault, real HSKSwap pools: all verifiable on [Blockscout](htt
 |---|---|---|
 | 🏦 | The owner creates a **2-of-2 committee vault** from their own wallet | [`0x50e4f0c4…0100`](https://hsk.blockscout.com/tx/0x50e4f0c427e15efe34ffab430705d186f50b5301354dfebecec97b846d560100) |
 | 💧 | The owner deposits 75 HSK as WHSK; the vault books its cost at the 30-minute TWAP | [`0xd186b87c…f864`](https://hsk.blockscout.com/tx/0xd186b87c6e84e10b88b09662585141c917075c64702da84cb70bcf5195e8f864) |
-| 🌳 | **475 decisions** (every refusal included) committed as one Merkle root | [`0x9ad3ce93…dea7`](https://hsk.blockscout.com/tx/0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7) |
+| 🌳 | **705 decisions** (every refusal included) committed in two Merkle roots | [`0x9ad3ce93…dea7`](https://hsk.blockscout.com/tx/0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7) · [`0xe22155fb…7c`](https://hsk.blockscout.com/tx/0xe22155fb30fea8d90d302f9b897189c8ff179e4da6bef5b614bba83ebfd01d7c) |
 | 📈 | The keeper records the NAV high-water mark for the drawdown breaker | [`0x896f6901…879e`](https://hsk.blockscout.com/tx/0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e) |
 | ✍️ | **First countersigned trade.** The owner says *"rebalance 50% to USDT"*; the agent proposes it; the **Guardian and the Risk Officer both sign**; the vault executes 38 WHSK → **3.0188 USDT** (committee floor 3.0112) | [`0x6e02064a…4584`](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584) |
 | 🛡️ | **15 attacks** fired at the live vault (stolen agent key, forged committee, route swap, drain, takeover…): **15/15 blocked** by the contract's own reverts | [run them yourself](https://vendhan1512.github.io/Al-Trading-Automation/?run=1#break) |
@@ -68,7 +68,7 @@ Real money, a real vault, real HSKSwap pools: all verifiable on [Blockscout](htt
 | Agent loosens a limit 10× | `NotTighter` |
 | Fake stop-loss on a healthy position | refused |
 
-**2. Verify the mainnet trade from raw chain data.**
+**2. Verify the mainnet trade from raw chain data**, in your browser at **[#verify](https://vendhan1512.github.io/Al-Trading-Automation/?verify=0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584#verify)** (paste any trade hash) or from the CLI:
 ```bash
 cd agent && pnpm verify trade 0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584
 ```
@@ -125,6 +125,8 @@ The **[dashboard](https://vendhan1512.github.io/Al-Trading-Automation/)** is bui
 - **Break-It Arena.** The 15 live attacks above, as projectiles hitting the vault.
 - **Decision heartbeat.** Every tick the agent journals, with WAIT streaks grouped and every Guardian check one click away.
 - **Markets and arbitrage radar.** Live gaps against the exchange median, with hover history.
+- **Track record and refusal ledger.** The funnel from market ticks to proposals to refusals to executions, and, for every proposal the committee turned down, **who refused it and which check failed** (live: 59 AI proposals, 55 refused by the Execution Guardian, mostly because a 3 USDT trade can't pay its own gas). Every executed trade has a one-click *verify*.
+- **Verify any trade.** The 14 checks of `pnpm verify trade`, run from your browser: it recovers the committee signers from the EIP-712 permit and checks them against the vault at the block before. No wallet, no server of ours.
 - **Mission Control.** Chat with the agent; sign in with your wallet (a signature only, no gas) to apply changes or request a rebalance.
 
 Run locally, it talks to the live agent. On GitHub Pages it shows a published snapshot of the same data.
@@ -155,10 +157,10 @@ sequenceDiagram
 
 ## Tested
 
-**217 tests**, all passing:
+**219 tests**, all passing:
 
 - **101 contract tests** (Foundry): unit tests, v2 committee tests, invariants with a liveness check, and **8 against the real HSKSwap pools on a mainnet fork** (TWAP stop vs one-block wick, TWAP floor vs a worthless `minOut`, breaker, re-entry lockout).
-- **116 agent tests** (Vitest): reliability engine, candidates, Guardian and Risk Officer, transaction-manager recovery, copilot, owner sessions and requests, Merkle evidence.
+- **118 agent tests** (Vitest): reliability engine, candidates, Guardian and Risk Officer, transaction-manager recovery, copilot, owner sessions and requests, Merkle evidence, track record.
 
 Every scenario from the design document has a named test:
 
@@ -209,7 +211,7 @@ Every address and transaction: [docs/DEPLOYMENTS.md](docs/DEPLOYMENTS.md). The v
 ```bash
 pnpm install
 cd contracts && forge test && cd ..           # 101 contract tests (fork tests need network access)
-pnpm --filter @countersign/agent test         # 116 agent tests
+pnpm --filter @countersign/agent test         # 118 agent tests
 
 # three processes, three keys — each refuses to start if it can see another role's key
 pnpm --filter @countersign/agent guardian     # terminal 1: Execution Guardian (GUARDIAN_PK)
