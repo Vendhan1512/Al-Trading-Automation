@@ -1,1 +1,1 @@
-{"trades":[]}
+{"trades":[{"trade_id":"0xc64e628bc9ff3ffe90e0065b40fa2ae7a99cbda0dbdb3404231cad2777c60faa","at":1795792418482,"asset":"WHSK","side":"SELL","tier":"EXIT","amount_in":"38000000000000000000","amount_out":"3018754","realized_pnl":"-2591","expected_net":"-22176","gas_used":"315088","gas_price":"500001000000","tx_hash":"0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584","block":30722641,"prediction_hash":"0x0000000000000000000000000000000000000000000000000000000000000000"}]}

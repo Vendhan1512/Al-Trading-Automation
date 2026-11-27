@@ -20,7 +20,8 @@ const PROOFS: { label: string; detail: string; hash: string; net: "mainnet" | "t
   { label: "Owner creates the 2-of-2 vault", detail: "createVault from the owner's wallet", hash: "0x50e4f0c427e15efe34ffab430705d186f50b5301354dfebecec97b846d560100", net: "mainnet" },
   { label: "Decision anchor #0", detail: "475 decisions in one Merkle root · verify decision → 3/3", hash: "0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7", net: "mainnet" },
   { label: "Keeper records the high-water mark", detail: "checkBreaker, sent by the agent", hash: "0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e", net: "mainnet" },
-  { label: "Committee-signed trade executes", detail: "2-of-2 permit · pnpm verify trade → 14/14", hash: "0x4cbbc0e4a64e95505e3fd92ba43a6f25ed84e04df47d432d95852bd5ea65c24f", net: "testnet" },
+  { label: "Owner deposits 75 HSK as WHSK", detail: "depositAsset with a 30-min TWAP cost basis", hash: "0xd186b87c6e84e10b88b09662585141c917075c64702da84cb70bcf5195e8f864", net: "mainnet" },
+  { label: "First 2-of-2 countersigned trade", detail: "38 WHSK → 3.0188 USDT · Guardian + Risk Officer signed · pnpm verify trade → 14/14", hash: "0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584", net: "mainnet" },
 ];
 const EXP = { mainnet: "https://hsk.blockscout.com", testnet: "https://testnet-explorer.hskchain.net" };
 
@@ -35,12 +36,13 @@ export function Evidence({ config, health }: { config?: Config | null; health?: 
   const stats = [
     { n: 214, l: "tests passing", s: "101 contract · 113 agent" },
     { n: 15, l: "attacks blocked", s: "live, on mainnet" },
+    { n: 1, l: "countersigned mainnet trade", s: "verify trade → 14/14" },
     { n: 475, l: "decisions anchored", s: "one Merkle root" },
     { n: -91, l: "% losses vs rules alone", s: "30-day backtest", suffix: "%" },
   ];
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {stats.map((s, i) => (
           <motion.div key={s.l} initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.07 }} className="rounded-2xl border border-line/80 bg-panel/60 p-4">
             <div className="font-display text-[34px] leading-none font-bold text-mint"><CountUp to={s.n} suffix={s.suffix ?? ""} /></div>

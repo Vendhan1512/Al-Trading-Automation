@@ -81,8 +81,11 @@ Owner then deposited **75 HSK as WHSK** (vault: 76 WHSK ≈ 6.04 USDT cost basis
 |---|---|
 | Keeper records the NAV high-water mark (`checkBreaker`) | [`0x896f6901…879e`](https://hsk.blockscout.com/tx/0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e) |
 | Anchor #0: decisions 0–474 committed as one Merkle root | [`0x9ad3ce93…dea7`](https://hsk.blockscout.com/tx/0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7) |
+| **First countersigned trade**: owner asked "Rebalance 50% to USDT"; agent proposed an EXIT, Guardian + Risk Officer both signed; 38 WHSK → 3.018754 USDT (minOut 3.011207) | [`0x6e02064a…4584`](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584) |
 
 `VAULT=0x5c13…2030 pnpm verify decision 474` → decision re-hashes · anchor root on-chain · Merkle proof verifies → **VERIFIED 3/3**.
+
+`pnpm verify trade 0x6e02064a…4584` → mainnet vault · `execute` sent by the agent · both signers on the committee, distinct, threshold 2-of-2 · agent did not sign its own permit · fill ≥ committee minOut → **VERIFIED 14/14**.
 
 ## HSK mainnet (chain 177), v1 — deployed 23 Nov 2026 (superseded, kept for the record)
 | Contract | Address | Verification |

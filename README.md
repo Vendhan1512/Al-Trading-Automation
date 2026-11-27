@@ -22,7 +22,7 @@ AI proposes ─► Execution Guardian prices it ─► Risk Officer re-checks it
 
 ## Verify it yourself (3 minutes, no wallet)
 1. **Try to break it.** Open the dashboard's *Try to break it* tab. It runs 15 real attacks against a live v2 vault with `eth_call` from your browser: stolen agent key, forged committee, outsider, guardian submitting, old policy, expired permit, route swap, drain, loosen, rewrite, committee takeover, ownership grab, breaker reset, fake stop-loss. **15/15 blocked**, each with the contract's own revert.
-2. **Verify a committee trade.** `cd agent && pnpm verify trade 0x4cbbc0e4a64e95505e3fd92ba43a6f25ed84e04df47d432d95852bd5ea65c24f --testnet` (or any trade hash). It decodes the transaction, recovers both committee signers from the EIP-712 permit, and checks membership, threshold, policy, sender and fill at the previous block: **14/14 PASS**.
+2. **Verify a committee trade.** `cd agent && pnpm verify trade 0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584` (the first 2-of-2 countersigned trade on **mainnet**: 38 WHSK → 3.0188 USDT; add `--testnet` for testnet hashes). It decodes the transaction, recovers both committee signers from the EIP-712 permit, and checks membership, threshold, policy, sender and fill at the previous block: **14/14 PASS**.
 3. **Read the contracts.** Verified sources on Blockscout and Sourcify (addresses below).
 
 ## Deployments
