@@ -32,6 +32,7 @@ Most AI trading agents run on a single hot key. Three things can go wrong:
 | CountersignVault v2 | `0x0728B021D518a916edC1dc7689d6fBD23d601098` (Sourcify exact + Blockscout full) |
 | VaultFactory v2 | `0x564ae60993717fF696c6E261F3CD7d4Ee9c56af4` (Sourcify exact + Blockscout full) |
 | Owner's 2-of-2 vault | `0x5c13500A4aD4277a13C7d774a78Cfd267A202030` (15/15 attacks blocked on mainnet) |
+| Chat rule enforced on-chain (`tighten()`, daily loss 1.0 → 0.5 USDT) | [`0x39007191…88b1`](https://hsk.blockscout.com/tx/0x390071919bf2531efa5853266648ad24f847d0902cc0747efb7a3796d1a288b1) |
 | First countersigned trade (2-of-2, `verify trade` → 14/14) | [`0x6e02064a…4584`](https://hsk.blockscout.com/tx/0x6e02064a32009d8636bd60c002d9c7ee0fe4b4b88235cda6b7b8c8b769d74584): 38 WHSK → 3.0188 USDT |
 | Decision anchor #0 (475 decisions, one Merkle root) | `0x9ad3ce936fadc559d92351ff835e35f74e8696b835ba1b72ead827771f21dea7` · `pnpm verify decision 474` → VERIFIED 3/3 |
 | Keeper `checkBreaker` (high-water mark) | `0x896f69019e99cb4f0fa13a7fe7b846f0ad52adcf1d16a172f13b1902ba43879e` |
